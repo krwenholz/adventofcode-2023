@@ -1,0 +1,4 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/krwenholz/adventofcode-2023
+gazelle(name = "gazelle")

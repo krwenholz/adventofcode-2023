@@ -1,0 +1,6 @@
+# bazel
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-adventofcode-2023
+.direnv
