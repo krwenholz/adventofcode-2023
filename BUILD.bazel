@@ -1,4 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 
 # gazelle:prefix github.com/krwenholz/adventofcode-2023
 gazelle(name = "gazelle")
+
+go_library(
+    name = "adventofcode-2023_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/krwenholz/adventofcode-2023",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "adventofcode-2023",
+    embed = [":adventofcode-2023_lib"],
+    visibility = ["//visibility:public"],
+)
