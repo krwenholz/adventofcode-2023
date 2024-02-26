@@ -1,0 +1,8 @@
+I'm working on [Advent of Code 2023](https://adventofcode.com/2023), mostly as a motivation to futz around
+with go, bazel, and nix. The latter two are _overkill_, but I want to get more familiar with using them 
+outside work.
+
+Resource links as I go:
+- [cobra cli generator](https://github.com/spf13/cobra-cli/blob/main/README.md)
+- [bazel tutorial](https://earthly.dev/blog/build-golang-bazel-gazelle/)
+- [gazelle docs](https://github.com/bazelbuild/bazel-gazelle?tab%253Dreadme-ov-file#toc-entry-2)
