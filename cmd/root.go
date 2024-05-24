@@ -1,7 +1,3 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
@@ -14,7 +10,7 @@ var puzzleInput string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "adventofcode",
+	Use: "adventofcode",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -37,5 +33,3 @@ func init() {
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
-
-
