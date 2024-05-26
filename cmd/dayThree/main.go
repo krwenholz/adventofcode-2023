@@ -2,8 +2,8 @@ package dayThree
 
 import (
 	"bufio"
-	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"unicode"
 )
@@ -77,7 +77,7 @@ func ScanPuzzle(path string) []int {
 				if candidatePartIsValid {
 					parts = append(parts, candidatePart)
 				} else {
-					//fmt.Println(i, j, candidatePart)
+					slog.Debug("debug candidate part", "i", i, "j", j, "candidatePart", candidatePart)
 				}
 
 				candidatePart = 0
@@ -104,7 +104,7 @@ func PartOne(puzzleFile string) {
 	for _, p := range parts {
 		partsSum += p
 	}
-	fmt.Println("Parts Sum:", partsSum)
+	slog.Info("final sum", "sum", partsSum)
 }
 
 func PartTwo(puzzleFile string) {
