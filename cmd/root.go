@@ -3,7 +3,9 @@ package cmd
 import (
 	"log/slog"
 	"os"
+	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
 )
 
@@ -27,13 +29,9 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-
 	rootCmd.PersistentFlags().StringVar(&puzzleInput, "puzzle-input", "", "the puzzle input")
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
+	// Logging configuration
 	var logLevel slog.Level
 	switch os.Getenv("LOG_LEVEL") {
 	case "debug":
@@ -41,6 +39,12 @@ func init() {
 	default:
 		logLevel = slog.LevelInfo
 	}
-	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
-	slog.SetDefault(slog.New(h))
+	//h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	//slog.SetDefault(slog.New(h))
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      logLevel,
+			TimeFormat: time.TimeOnly,
+		}),
+	))
 }
