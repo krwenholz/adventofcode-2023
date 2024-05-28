@@ -2,6 +2,7 @@ package dayThree
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -10,22 +11,37 @@ import (
 )
 
 type SchematicEntry struct {
-	PartNumber int
-	Symbol     string
-	Xs         []int
-	Y          int
+	PartNumber  int
+	Symbol      string
+	Xs          []int
+	Y           int
+	isValidPart bool
+	GearParts   map[string]int
 }
 
-func (s *SchematicEntry) IsSymbol() bool {
-	return s.Symbol != "" && s.Symbol != "."
+func (e *SchematicEntry) IsSymbol() bool {
+	return e.Symbol != "" && e.Symbol != "."
+}
+
+func (e *SchematicEntry) AddGearPart(p *SchematicEntry) {
+	if _, ok := e.GearParts[e.Id()]; !ok {
+		e.GearParts[p.Id()] = p.PartNumber
+	}
 }
 
 func (s *SchematicEntry) IsValidPart(schematic map[string]*SchematicEntry) bool {
+	if s.isValidPart {
+		return true
+	}
+	if s.IsSymbol() {
+		return false
+	}
 	xs := append([]int{s.Xs[0] - 1}, s.Xs...)
 	xs = append(xs, s.Xs[len(s.Xs)-1]+1)
 	for _, x := range xs {
 		for _, row := range []int{s.Y - 1, s.Y, s.Y + 1} {
 			if e, ok := schematic[id(x, row)]; ok && e.IsSymbol() {
+				s.isValidPart = true
 				return true
 			}
 		}
@@ -34,12 +50,52 @@ func (s *SchematicEntry) IsValidPart(schematic map[string]*SchematicEntry) bool 
 	return false
 }
 
-func (s *SchematicEntry) String() string {
-	return fmt.Sprintf("PartNumber: %d, Symbol: %s, Xs: %v, Y: %d", s.PartNumber, s.Symbol, s.Xs, s.Y)
+func (s *SchematicEntry) IsGear(schematic map[string]*SchematicEntry) bool {
+	if s.Symbol != "*" {
+		return false
+	}
+
+	xs := append([]int{s.Xs[0] - 1}, s.Xs...)
+	xs = append(xs, s.Xs[len(s.Xs)-1]+1)
+	for _, x := range xs {
+		for _, row := range []int{s.Y - 1, s.Y, s.Y + 1} {
+			if e, ok := schematic[id(x, row)]; ok && e.IsValidPart(schematic) {
+				slog.Debug("adding a new gear part", "s.Id", s.Id(), "gear part", e)
+				s.AddGearPart(e)
+			}
+		}
+	}
+
+	slog.Debug(
+		"calculated gear parts",
+		"s.Id", s.Id(),
+		"gear parts", s.GearParts,
+		"length of gears", len(s.GearParts),
+	)
+	return len(s.GearParts) == 2
 }
 
-func (s *SchematicEntry) Id() string {
-	return id(s.Xs[0], s.Y)
+// NAUGHTY: this relies on IsGear being called first, should prepopulate gearParts at construction
+// meh
+func (e *SchematicEntry) GearRatio() int {
+	ratio := 1
+	for _, partNumber := range e.GearParts {
+		ratio *= partNumber
+	}
+	return ratio
+}
+
+func (e *SchematicEntry) String() string {
+	s, err := json.Marshal(e)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return string(s)
+}
+
+func (e *SchematicEntry) Id() string {
+	return id(e.Xs[0], e.Y)
 }
 
 func id(x, y int) string {
@@ -87,6 +143,7 @@ func BuildSchematic(path string) map[string]*SchematicEntry {
 				Symbol:     string(c),
 				Xs:         []int{j},
 				Y:          i,
+				GearParts:  map[string]int{},
 			}
 			if e.IsSymbol() {
 				schematicEntries = append(schematicEntries, e)
@@ -100,6 +157,7 @@ func BuildSchematic(path string) map[string]*SchematicEntry {
 						Symbol:     "",
 						Xs:         xs,
 						Y:          i,
+						GearParts:  map[string]int{},
 					})
 
 				candidatePart = 0
@@ -126,8 +184,8 @@ func PartOne(puzzleFile string) {
 	schematic := BuildSchematic(puzzleFile)
 	slog.Debug("built schematic", "entries", schematic)
 
-	//fmt.Println(parts)
 	parts := map[string]*SchematicEntry{}
+	partsSum := 0
 	for _, e := range schematic {
 		if e.IsSymbol() {
 			continue
@@ -135,16 +193,32 @@ func PartOne(puzzleFile string) {
 		if _, ok := parts[e.Id()]; !ok {
 			if e.IsValidPart(schematic) {
 				parts[e.Id()] = e
+				partsSum += e.PartNumber
 			}
 		}
 	}
 
-	partsSum := 0
-	for _, p := range parts {
-		partsSum += p.PartNumber
-	}
+	slog.Debug("final sum", "parts", parts, "sum", partsSum)
 	slog.Info("final sum", "sum", partsSum)
 }
 
 func PartTwo(puzzleFile string) {
+	schematic := BuildSchematic(puzzleFile)
+	slog.Debug("built schematic", "entries", schematic)
+
+	gears := map[string]*SchematicEntry{}
+	gearRatiosSum := 0
+	for _, e := range schematic {
+		if !e.IsGear(schematic) {
+			continue
+		}
+
+		if _, ok := gears[e.Id()]; !ok {
+			gears[e.Id()] = e
+			gearRatiosSum += e.GearRatio()
+		}
+	}
+
+	slog.Debug("final sum", "parts", gears, "sum", gearRatiosSum)
+	slog.Info("final sum", "sum", gearRatiosSum)
 }
