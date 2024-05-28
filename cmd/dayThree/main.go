@@ -2,40 +2,55 @@ package dayThree
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
 	"unicode"
 )
 
-func isSymbol(c rune) bool {
-	return !unicode.IsDigit(c) && !isSpace(c)
+type SchematicEntry struct {
+	PartNumber int
+	Symbol     string
+	Xs         []int
+	Y          int
 }
 
-func isSpace(c rune) bool {
-	return c == '.'
+func (s *SchematicEntry) IsSymbol() bool {
+	return s.Symbol != "" && s.Symbol != "."
 }
 
-func isValidPart(i int, precedingRow, thisRow, followingRow string) bool {
-	for _, row := range []string{precedingRow, thisRow, followingRow} {
-		if row == "" {
-			continue
-		}
-		if i-1 > 0 && isSymbol(rune(row[i-1])) {
-			return true
-		}
-		if isSymbol(rune(row[i])) {
-			return true
-		}
-		if i+2 < len(row) && isSymbol(rune(row[i+1])) {
-			return true
+func (s *SchematicEntry) IsValidPart(schematic map[string]*SchematicEntry) bool {
+	xs := append([]int{s.Xs[0] - 1}, s.Xs...)
+	xs = append(xs, s.Xs[len(s.Xs)-1]+1)
+	for _, x := range xs {
+		for _, row := range []int{s.Y - 1, s.Y, s.Y + 1} {
+			if e, ok := schematic[id(x, row)]; ok && e.IsSymbol() {
+				return true
+			}
 		}
 	}
 
 	return false
 }
 
-func ScanPuzzle(path string) []int {
+func (s *SchematicEntry) String() string {
+	return fmt.Sprintf("PartNumber: %d, Symbol: %s, Xs: %v, Y: %d", s.PartNumber, s.Symbol, s.Xs, s.Y)
+}
+
+func (s *SchematicEntry) Id() string {
+	return id(s.Xs[0], s.Y)
+}
+
+func id(x, y int) string {
+	return fmt.Sprintf("%d, %d", x, y)
+}
+
+func isSpace(c rune) bool {
+	return c == '.'
+}
+
+func BuildSchematic(path string) map[string]*SchematicEntry {
 	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -49,60 +64,84 @@ func ScanPuzzle(path string) []int {
 		rows = append(rows, scanner.Text())
 	}
 
-	parts := []int{}
-	candidatePartIsValid := false
-	previousRow := rows[0]
-	nextRow := rows[0]
+	schematicEntries := []*SchematicEntry{}
+	xs := []int{}
 
 	for i, row := range rows {
 		candidatePart := 0
-		if i > 0 {
-			previousRow = rows[i-1]
-		}
-		if i+1 < len(rows) {
-			nextRow = rows[i+1]
-		}
+
 		for j, c := range row {
 			atEnd := j == len(row)-1
 
 			if unicode.IsDigit(c) {
 				candidatePart = candidatePart*10 + int(c-'0')
-				candidatePartIsValid = candidatePartIsValid || isValidPart(j, previousRow, row, nextRow)
+				xs = append(xs, j)
+
 				if !atEnd {
 					continue
 				}
 			}
 
+			e := &SchematicEntry{
+				PartNumber: 0,
+				Symbol:     string(c),
+				Xs:         []int{j},
+				Y:          i,
+			}
+			if e.IsSymbol() {
+				schematicEntries = append(schematicEntries, e)
+			}
+
 			if candidatePart != 0 || atEnd {
-				if candidatePartIsValid {
-					parts = append(parts, candidatePart)
-				} else {
-					slog.Debug("debug candidate part", "i", i, "j", j, "candidatePart", candidatePart)
-				}
+				schematicEntries = append(
+					schematicEntries,
+					&SchematicEntry{
+						PartNumber: candidatePart,
+						Symbol:     "",
+						Xs:         xs,
+						Y:          i,
+					})
 
 				candidatePart = 0
-				candidatePartIsValid = false
+				xs = []int{}
 			}
 		}
 	}
 
-	return parts
+	schematic := map[string]*SchematicEntry{}
+	for _, e := range schematicEntries {
+		for _, x := range e.Xs {
+			schematic[id(x, e.Y)] = e
+		}
+	}
+
+	return schematic
+}
+
+func SumGearRatios(path string) []int {
+	return nil
 }
 
 func PartOne(puzzleFile string) {
-	// parse all lines
-	// for each line, for each position: check if number is adjacent to a symbol
-	// return part numbers slice
-	// accumulate
-	// return sum
-
-	parts := ScanPuzzle(puzzleFile)
+	schematic := BuildSchematic(puzzleFile)
+	slog.Debug("built schematic", "entries", schematic)
 
 	//fmt.Println(parts)
+	parts := map[string]*SchematicEntry{}
+	for _, e := range schematic {
+		if e.IsSymbol() {
+			continue
+		}
+		if _, ok := parts[e.Id()]; !ok {
+			if e.IsValidPart(schematic) {
+				parts[e.Id()] = e
+			}
+		}
+	}
 
 	partsSum := 0
 	for _, p := range parts {
-		partsSum += p
+		partsSum += p.PartNumber
 	}
 	slog.Info("final sum", "sum", partsSum)
 }
