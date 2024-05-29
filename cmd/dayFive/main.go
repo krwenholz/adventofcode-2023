@@ -113,7 +113,30 @@ func partOne(puzzleFile string) {
 }
 
 func partTwo(puzzleFile string) {
-	fmt.Println("Day part two", puzzleFile)
+	seedMap := parse(puzzleFile)
+
+	minimumLocation := math.MaxInt
+
+	for i := 0; i < len(seedMap.Seeds); i += 2 {
+		for s := seedMap.Seeds[i]; s < seedMap.Seeds[i]+seedMap.Seeds[i+1]; s++ {
+			src := "seed"
+			curNumber := s
+			for {
+				if dst, ok := seedMap.MappedMaps[src]; ok {
+					curNumber = dst.Get(curNumber)
+					src = dst.DstType
+				} else {
+					break
+				}
+			}
+
+			if curNumber < minimumLocation {
+				minimumLocation = curNumber
+			}
+		}
+	}
+
+	slog.Info("Day five part two", "minimumLocation", minimumLocation)
 }
 
 var Cmd = &cobra.Command{
