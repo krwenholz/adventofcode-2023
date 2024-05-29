@@ -18,10 +18,9 @@ type SeedMap struct {
 }
 
 type Map struct {
-	SrcType      string         `@Ident ToSeparator`
-	DstType      string         `@Ident "map" EOL`
-	MappedRange  []*MappedRange `@@+ EOL*`
-	ExpandedMaps map[int]int
+	SrcType     string         `@Ident ToSeparator`
+	DstType     string         `@Ident "map" EOL`
+	MappedRange []*MappedRange `@@+ EOL*`
 }
 
 type MappedRange struct {
@@ -34,11 +33,13 @@ func (m *Map) String() string {
 	return fmt.Sprintf("%s %s %v", m.SrcType, m.DstType, m.MappedRange)
 }
 
-func (m *Map) Get(i int) int {
-	if v, ok := m.ExpandedMaps[i]; ok {
-		return v
+func (m *Map) Get(src int) int {
+	for _, r := range m.MappedRange {
+		if r.Src <= src && src < r.Src+r.Range {
+			return r.Dst + (src - r.Src)
+		}
 	}
-	return i
+	return src
 }
 
 func (m *MappedRange) String() string {
@@ -81,14 +82,6 @@ func parse(puzzleFile string) *SeedMap {
 	for _, m := range seedMap.Maps {
 		// Make nice maps
 		seedMap.MappedMaps[m.SrcType] = m
-
-		// Expand ranges
-		m.ExpandedMaps = make(map[int]int)
-		for _, mr := range m.MappedRange {
-			for i := 0; i < mr.Range; i++ {
-				m.ExpandedMaps[mr.Src+i] = mr.Dst + i
-			}
-		}
 	}
 
 	return seedMap
