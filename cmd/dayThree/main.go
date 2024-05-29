@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"unicode"
+
+	"github.com/spf13/cobra"
 )
 
 type SchematicEntry struct {
@@ -180,7 +182,7 @@ func SumGearRatios(path string) []int {
 	return nil
 }
 
-func PartOne(puzzleFile string) {
+func partOne(puzzleFile string) {
 	schematic := BuildSchematic(puzzleFile)
 	slog.Debug("built schematic", "entries", schematic)
 
@@ -202,7 +204,7 @@ func PartOne(puzzleFile string) {
 	slog.Info("final sum", "sum", partsSum)
 }
 
-func PartTwo(puzzleFile string) {
+func partTwo(puzzleFile string) {
 	schematic := BuildSchematic(puzzleFile)
 	slog.Debug("built schematic", "entries", schematic)
 
@@ -221,4 +223,16 @@ func PartTwo(puzzleFile string) {
 
 	slog.Debug("final sum", "parts", gears, "sum", gearRatiosSum)
 	slog.Info("final sum", "sum", gearRatiosSum)
+}
+
+var Cmd = &cobra.Command{
+	Use: "dayThree",
+	Run: func(cmd *cobra.Command, args []string) {
+		puzzleInput, _ := cmd.Flags().GetString("puzzle-input")
+		if !cmd.Flag("part-two").Changed {
+			partOne(puzzleInput)
+		} else {
+			partTwo(puzzleInput)
+		}
+	},
 }

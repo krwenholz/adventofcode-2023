@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/alecthomas/participle/v2"
+	"github.com/spf13/cobra"
 )
 
 // Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
@@ -58,7 +59,7 @@ func (c *Card) Copies() int {
 	return count
 }
 
-func PartOne(puzzleFile string) {
+func partOne(puzzleFile string) {
 	fmt.Println("Day template part one", puzzleFile)
 	parser, err := participle.Build[Card]()
 	if err != nil {
@@ -74,7 +75,7 @@ func PartOne(puzzleFile string) {
 	slog.Info("Total points", "points", points)
 }
 
-func PartTwo(puzzleFile string) {
+func partTwo(puzzleFile string) {
 	fmt.Println("Day template part one", puzzleFile)
 	parser, err := participle.Build[Card]()
 	if err != nil {
@@ -116,4 +117,16 @@ func PartTwo(puzzleFile string) {
 
 	slog.Debug("Total cards", "count", total, "copyTally", copyTally)
 	slog.Info("Total cards", "count", total)
+}
+
+var Cmd = &cobra.Command{
+	Use: "dayFour",
+	Run: func(cmd *cobra.Command, args []string) {
+		puzzleInput, _ := cmd.Flags().GetString("puzzle-input")
+		if !cmd.Flag("part-two").Changed {
+			partOne(puzzleInput)
+		} else {
+			partTwo(puzzleInput)
+		}
+	},
 }

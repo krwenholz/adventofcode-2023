@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"adventofcode/cmd/dayFive"
+	"adventofcode/cmd/dayFour"
+	"adventofcode/cmd/dayThree"
+	"adventofcode/cmd/dayTwo"
 	"log/slog"
 	"os"
 	"time"
@@ -29,7 +33,10 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVar(&puzzleInput, "puzzle-input", "", "the puzzle input")
+	rootCmd.PersistentFlags().String("puzzle-input", "", "the puzzle input")
+	rootCmd.MarkFlagRequired("puzzle-input")
+
+	rootCmd.PersistentFlags().Bool("part-two", false, "Whether to run part two of the day's challenge")
 
 	// Logging configuration
 	var logLevel slog.Level
@@ -47,4 +54,13 @@ func init() {
 			TimeFormat: time.TimeOnly,
 		}),
 	))
+
+	for _, c := range []*cobra.Command{
+		dayTwo.Cmd,
+		dayThree.Cmd,
+		dayFour.Cmd,
+		dayFive.Cmd,
+	} {
+		rootCmd.AddCommand(c)
+	}
 }

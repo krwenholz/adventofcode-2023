@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/alecthomas/participle/v2"
+	"github.com/spf13/cobra"
 )
 
 // Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
@@ -78,7 +79,7 @@ func (g *Game) power() int {
 	return minBlue * minRed * minGreen
 }
 
-func PartOne(puzzleFile string) {
+func partOne(puzzleFile string) {
 	fmt.Println("Day template part one", puzzleFile)
 	parser, err := participle.Build[Game]()
 	if err != nil {
@@ -104,7 +105,7 @@ func PartOne(puzzleFile string) {
 	fmt.Println(len(validGames), cumValidIdSum)
 }
 
-func PartTwo(puzzleFile string) {
+func partTwo(puzzleFile string) {
 	parser, err := participle.Build[Game]()
 	if err != nil {
 		log.Fatal(err)
@@ -119,4 +120,17 @@ func PartTwo(puzzleFile string) {
 	}
 
 	fmt.Println(cumPowers)
+}
+
+// dayTwoCmd represents the dayTwo command
+var Cmd = &cobra.Command{
+	Use: "dayTwo",
+	Run: func(cmd *cobra.Command, args []string) {
+		puzzleInput, _ := cmd.Flags().GetString("puzzle-input")
+		if !cmd.Flag("part-two").Changed {
+			partOne(puzzleInput)
+		} else {
+			partTwo(puzzleInput)
+		}
+	},
 }
