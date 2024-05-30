@@ -3,6 +3,7 @@ package cmd
 import (
 	"adventofcode/cmd/dayFive"
 	"adventofcode/cmd/dayFour"
+	"adventofcode/cmd/daySix"
 	"adventofcode/cmd/dayThree"
 	"adventofcode/cmd/dayTwo"
 	"log/slog"
@@ -60,6 +61,7 @@ func init() {
 		dayThree.Cmd,
 		dayFour.Cmd,
 		dayFive.Cmd,
+		daySix.Cmd,
 	} {
 		rootCmd.AddCommand(c)
 	}
