@@ -1,8 +1,11 @@
 package daySix
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer"
@@ -85,7 +88,19 @@ func partOne(puzzleFile string) {
 }
 
 func partTwo(puzzleFile string) {
-	slog.Info("Day six part two")
+	input := parse(puzzleFile)
+	timeParts := []string{}
+	distanceParts := []string{}
+	for i := 0; i < len(input.Times); i++ {
+		timeParts = append(timeParts, fmt.Sprint(input.Times[i]))
+		distanceParts = append(distanceParts, fmt.Sprint(input.Distances[i]))
+	}
+
+	time, _ := strconv.Atoi(strings.Join(timeParts, ""))
+	distance, _ := strconv.Atoi(strings.Join(distanceParts, ""))
+
+	answer := validHolds([]int{time}, []int{distance})
+	slog.Info("Day six part two", "time", time, "distance", distance, "answer", answer)
 }
 
 var Cmd = &cobra.Command{
