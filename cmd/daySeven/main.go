@@ -65,9 +65,10 @@ var cardOrdering = map[byte]int{
 }
 
 type Hand struct {
-	Cards string `@Cards`
-	Bid   int    `@Int`
-	kind  Kind
+	Cards        string `@Cards`
+	Bid          int    `@Int`
+	AllowsJokers bool
+	kind         Kind
 }
 
 func complexHandKind(cardCounts map[rune]int) Kind {
@@ -101,12 +102,37 @@ func (h *Hand) Kind() Kind {
 		return h.kind
 	}
 	cardCounts := map[rune]int{}
+
 	for _, card := range h.Cards {
 		if _, ok := cardCounts[card]; !ok {
 			cardCounts[card] = 0
 		}
 		cardCounts[card] = cardCounts[card] + 1
 	}
+
+	if jCount, ok := cardCounts['J']; ok && h.AllowsJokers {
+		// We can use _any_ jokers to increase the highest count so far
+		// By increasing our best count so far, we increase our hand value
+		maxCard := '0'
+		maxCount := 0
+		for card, count := range cardCounts {
+			if card == 'J' {
+				continue
+			}
+			if count > maxCount {
+				maxCard = card
+				maxCount = count
+			}
+		}
+		if maxCard != '0' {
+			cardCounts[maxCard] = cardCounts[maxCard] + jCount
+			cardCounts['J'] = 0
+			slog.Debug("increased count with joker", "cardCounts", cardCounts)
+			delete(cardCounts, 'J')
+			slog.Debug("increased count with joker", "cardCounts", cardCounts)
+		}
+	}
+
 	switch len(cardCounts) {
 	case 1:
 		h.kind = FiveOfAKind
@@ -142,14 +168,13 @@ func (h *Hand) Less(other *Hand) bool {
 }
 
 func (h *Hand) String() string {
-	return fmt.Sprintf("Hand{Cards: %s, Bid: %d, Kind: %s}", h.Cards, h.Bid, h.Kind())
+	return fmt.Sprintf("Hand{Cards: %s, Bid: %d, Kind: %s, AllowJokers: %t}", h.Cards, h.Bid, h.Kind(), h.AllowsJokers)
 }
 
 type HandHeap []*Hand
 
 func (h HandHeap) Len() int { return len(h) }
 func (h HandHeap) Less(i, j int) bool {
-	slog.Debug("Comparing hands", "i", h[i], "j", h[j], "result", h[i].Less(h[j]))
 	return h[i].Less(h[j])
 }
 func (h HandHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
@@ -169,7 +194,6 @@ func (h *HandHeap) Pop() any {
 }
 
 func partOne(puzzleFile string) {
-	fmt.Println("Day template part one", puzzleFile)
 	handLexer := lexer.MustSimple([]lexer.SimpleRule{
 		// Order matters here! Int kept stealing the leading cards before I changed the ordering.
 		{"Cards", `[AKQJT98765432]{5}`},
@@ -209,7 +233,45 @@ func partOne(puzzleFile string) {
 }
 
 func partTwo(puzzleFile string) {
-	fmt.Println("Day part two", puzzleFile)
+	// Jokers are now wild
+	cardOrdering['J'] = 1
+	handLexer := lexer.MustSimple([]lexer.SimpleRule{
+		// Order matters here! Int kept stealing the leading cards before I changed the ordering.
+		{"Cards", `[AKQJT98765432]{5}`},
+		{"Int", `(\d*\.)?\d+`},
+		{"EOL", `\n`},
+		{"Colon", `:`},
+		{"Whitespace", `[ \t]+`},
+	})
+	parser, err := participle.Build[Hand](
+		participle.Lexer(handLexer),
+		participle.Elide("Whitespace"),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	scanner := scanner.NewScanner[Hand](parser, puzzleFile)
+
+	handHeap := &HandHeap{}
+	for scanner.Scan() {
+		hand := scanner.Struct()
+		hand.AllowsJokers = true
+		heap.Push(handHeap, hand)
+	}
+
+	ordered := []*Hand{}
+	totalWinnings := 0
+	rank := 0
+	for handHeap.Len() > 0 {
+		rank++
+		h := heap.Pop(handHeap).(*Hand)
+		totalWinnings += h.Bid * rank
+		ordered = append(ordered, h)
+	}
+
+	slog.Debug("finished computing!", "ordered hands", ordered)
+	slog.Info("Day seven part one", "total winnings", totalWinnings)
 }
 
 var Cmd = &cobra.Command{
