@@ -23,7 +23,7 @@ func zeroed(row []int) bool {
 	return true
 }
 
-func (s *Sequence) predictNextValue() int {
+func (s *Sequence) extrapolate() (int, int) {
 	rows := [][]int{s.Values}
 	for {
 		lastRow := rows[len(rows)-1]
@@ -43,14 +43,19 @@ func (s *Sequence) predictNextValue() int {
 		belowNum := rows[i+1][len(rows[i+1])-1]
 		rows[i] = append(rows[i], curNum+belowNum)
 	}
-	slog.Debug("extrapolated", "rows", rows)
+	slog.Debug("extrapolated forward", "rows", rows)
 
-	return rows[0][len(rows[0])-1]
+	for i := len(rows) - 2; i >= 0; i-- {
+		curNum := rows[i][0]
+		belowNum := rows[i+1][0]
+		rows[i] = append([]int{curNum - belowNum}, rows[i]...)
+	}
+	slog.Debug("extrapolated backward", "rows", rows)
+
+	return rows[0][0], rows[0][len(rows[0])-1]
 }
 
-func partOne(puzzleFile string) {
-	slog.Info("Day Nine part one", "puzzle file", puzzleFile)
-
+func newScanner(puzzleFile string) *scanner.PuzzleScanner[Sequence] {
 	sequenceLexer := lexer.MustSimple([]lexer.SimpleRule{
 		{"Int", `(-)?(\d*\.)?\d+`},
 		{"Whitespace", `[ \t]+`},
@@ -63,11 +68,18 @@ func partOne(puzzleFile string) {
 		log.Fatal(err)
 	}
 
-	scanner := scanner.NewScanner[Sequence](parser, puzzleFile)
+	return scanner.NewScanner[Sequence](parser, puzzleFile)
+}
+
+func partOne(puzzleFile string) {
+	slog.Info("Day Nine part one", "puzzle file", puzzleFile)
+
+	s := newScanner(puzzleFile)
 	sum := 0
-	for scanner.Scan() {
-		seq := scanner.Struct()
-		sum += seq.predictNextValue()
+	for s.Scan() {
+		seq := s.Struct()
+		_, v := seq.extrapolate()
+		sum += v
 	}
 
 	slog.Info("Finished day nine part one", "sum", sum)
@@ -75,6 +87,16 @@ func partOne(puzzleFile string) {
 
 func partTwo(puzzleFile string) {
 	slog.Info("Day Nine part two", "puzzle file", puzzleFile)
+
+	s := newScanner(puzzleFile)
+	sum := 0
+	for s.Scan() {
+		seq := s.Struct()
+		v, _ := seq.extrapolate()
+		sum += v
+	}
+
+	slog.Info("Finished day nine part two", "sum", sum)
 }
 
 var Cmd = &cobra.Command{
