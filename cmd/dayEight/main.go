@@ -2,20 +2,20 @@ package dayEight
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
-	"github.com/alecthomas/participle/v2"
-	"github.com/alecthomas/participle/v2/lexer"
 	"github.com/spf13/cobra"
 )
 
 type Node struct {
-	Name  string `@Node " = " "("`
-	Left  string `@Node ", "`
-	Right string `@Node ")" EOL?`
+	Name  string
+	Left  string
+	Right string
 }
 
 func (n *Node) String() string {
@@ -30,30 +30,22 @@ func parse(path string) (string, map[string]*Node) {
 
 	scanner := bufio.NewScanner(f)
 
-	nodeLexer := lexer.MustSimple([]lexer.SimpleRule{
-		// Order matters here! Int kept stealing the leading cards before I changed the ordering.
-		{"Node", `[A-Z0-9]{3}`},
-		{"EOL", `\n`},
-		{"Colon", `:`},
-		{"Whitespace", `[ \t]+`},
-	})
-	parser, err := participle.Build[Node](
-		participle.Lexer(nodeLexer),
-		participle.Elide("Whitespace"),
-	)
 	if err != nil {
 		slog.Error("failed to parse", "err", err)
 		panic(err)
 	}
 
+	scanner.Scan()
 	instructions := scanner.Text()
+	scanner.Scan() // Skip the blank line
+	slog.Debug("parsed instructions", "instructions", instructions)
 
 	nodes := map[string]*Node{}
 	for scanner.Scan() {
-		node, err := parser.ParseString(path, scanner.Text())
-		if err != nil {
-			slog.Error("failed to parse", "err", err)
-			panic(err)
+		node := &Node{
+			Name:  scanner.Text()[:3],
+			Left:  scanner.Text()[7:10],
+			Right: scanner.Text()[12:15],
 		}
 		nodes[node.Name] = node
 	}
@@ -84,40 +76,70 @@ func partTwo(puzzleFile string) {
 	instructions, nodes := parse(puzzleFile)
 	slog.Debug("parsed input", "input", instructions, "nodes", nodes)
 
-	curs := []*Node{}
+	curs := map[string]*Node{}
+	zsVisited := map[string]map[string][]int{}
 	for _, node := range nodes {
 		if node.Name[2] == 'A' {
-			curs = append(curs, node)
+			curs[node.Name] = node
+			zsVisited[node.Name] = map[string][]int{}
 		}
 	}
+	slog.Info("initial curs", "curs", curs)
+
 	steps := 0
 	for {
-		newCurs := []*Node{}
-		for _, cur := range curs {
-			switch instructions[steps%len(instructions)] {
+		i := instructions[steps%len(instructions)]
+		for origin, cur := range curs {
+			switch i {
 			case 'L':
 				cur = nodes[cur.Left]
 			case 'R':
 				cur = nodes[cur.Right]
 			}
-			newCurs = append(newCurs, cur)
+			curs[origin] = cur
 		}
-		curs = newCurs
 		steps++
-		slog.Debug("stepping", "curs", curs, "steps", steps)
 
-		allZs := true
-		for _, cur := range curs {
-			if cur.Name[2] != 'Z' {
-				allZs = false
-				break
+		numZs := 0
+		for origin, cur := range curs {
+			if cur.Name[2] == 'Z' {
+				numZs++
+				if _, ok := zsVisited[origin][cur.Name]; !ok {
+					zsVisited[origin][cur.Name] = []int{}
+				}
+				zsVisited[origin][cur.Name] = append(zsVisited[origin][cur.Name], steps)
 			}
 		}
-		if allZs {
+		slog.Debug("stepping", "curs", curs, "steps", steps, "numZs", numZs)
+		/**if numZs > 1 {
+			slog.Info("stepping on zs", "curs", curs, "steps", steps, "numZs", numZs)
+		}**/
+
+		if numZs == len(curs) || allCycled(zsVisited) {
 			break
 		}
 	}
-	slog.Info("Day eight part one", "steps", steps)
+	j, _ := json.MarshalIndent(zsVisited, "", "  ")
+	os.WriteFile(fmt.Sprintf("inputs/zsVisited%d.json", time.Now().Nanosecond()), j, 0644)
+
+	slog.Info("Day eight part two", "steps", steps, "curs", curs)
+}
+
+// Turns out I had to look up the answer on Reddit. Once we're in a cycle, we can find the LCM of
+// the cycle lengths to find the number of steps to get every ghost in sync.
+func allCycled(zsVisited map[string]map[string][]int) bool {
+	for _, zs := range zsVisited {
+		hasCycle := false
+		for _, visits := range zs {
+			if len(visits) > 1 {
+				hasCycle = true
+			}
+		}
+		if !hasCycle {
+			return false
+		}
+	}
+	return true
 }
 
 var Cmd = &cobra.Command{
