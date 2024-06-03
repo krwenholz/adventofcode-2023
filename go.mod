@@ -8,4 +8,5 @@ require (
 	github.com/lmittmann/tint v1.0.4 // indirect
 	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	golang.org/x/text v0.15.0 // indirect
 )

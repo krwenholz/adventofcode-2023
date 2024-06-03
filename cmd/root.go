@@ -1,13 +1,6 @@
 package cmd
 
 import (
-	"adventofcode/cmd/dayEight"
-	"adventofcode/cmd/dayFive"
-	"adventofcode/cmd/dayFour"
-	"adventofcode/cmd/daySeven"
-	"adventofcode/cmd/daySix"
-	"adventofcode/cmd/dayThree"
-	"adventofcode/cmd/dayTwo"
 	"log/slog"
 	"os"
 	"time"
@@ -57,16 +50,4 @@ func init() {
 			TimeFormat: time.TimeOnly,
 		}),
 	))
-
-	for _, c := range []*cobra.Command{
-		dayTwo.Cmd,
-		dayThree.Cmd,
-		dayFour.Cmd,
-		dayFive.Cmd,
-		daySix.Cmd,
-		daySeven.Cmd,
-		dayEight.Cmd,
-	} {
-		rootCmd.AddCommand(c)
-	}
 }

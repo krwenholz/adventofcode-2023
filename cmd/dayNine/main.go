@@ -1,21 +1,21 @@
-package dayTemplate
+package dayNine
 
 import (
-	"fmt"
+	"log/slog"
 
 	"github.com/spf13/cobra"
 )
 
 func partOne(puzzleFile string) {
-	fmt.Println("Day part one", puzzleFile)
+	slog.Info("Day Nine part one", "puzzle file", puzzleFile)
 }
 
 func partTwo(puzzleFile string) {
-	fmt.Println("Day part two", puzzleFile)
+	slog.Info("Day Nine part two", "puzzle file", puzzleFile)
 }
 
 var Cmd = &cobra.Command{
-	Use: "dayTemplate",
+	Use: "dayNine",
 	Run: func(cmd *cobra.Command, args []string) {
 		puzzleInput, _ := cmd.Flags().GetString("puzzle-input")
 		if !cmd.Flag("part-two").Changed {
@@ -27,5 +27,5 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().BoolP("part-two", "p", false, "Whether to run part two of the day's challenge")
+	Cmd.Flags().Bool("part-two", false, "Whether to run part two of the day's challenge")
 }
