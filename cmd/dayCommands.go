@@ -2,21 +2,14 @@
 package cmd
 
 import (
-	
 	"adventofcode/cmd/dayEight"
-	
 	"adventofcode/cmd/dayFive"
-	
 	"adventofcode/cmd/dayFour"
-	
 	"adventofcode/cmd/dayNine"
-	
 	"adventofcode/cmd/daySeven"
-	
 	"adventofcode/cmd/daySix"
-	
+	"adventofcode/cmd/dayTen"
 	"adventofcode/cmd/dayThree"
-	
 	"adventofcode/cmd/dayTwo"
 	
 
@@ -25,21 +18,14 @@ import (
 
 func init() {
 	for _, c := range []*cobra.Command{
-		
 		dayEight.Cmd,
-		
 		dayFive.Cmd,
-		
 		dayFour.Cmd,
-		
 		dayNine.Cmd,
-		
 		daySeven.Cmd,
-		
 		daySix.Cmd,
-		
+		dayTen.Cmd,
 		dayThree.Cmd,
-		
 		dayTwo.Cmd,
 		
 	} {

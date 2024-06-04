@@ -41,7 +41,7 @@ var NewDayCmd = &cobra.Command{
 				}
 			}
 		}
-		f, err = os.Create("cmd/registry.go")
+		f, err = os.Create("cmd/dayCommands.go")
 		err = registryTemplate.Execute(f, days)
 		if err != nil {
 			panic(err)
@@ -94,8 +94,7 @@ var registryTemplate = template.Must(template.New("registryTemplate").Parse(
 package cmd
 
 import (
-	{{range .}}
-	"adventofcode/cmd/day{{.}}"
+	{{range .}}"adventofcode/cmd/day{{.}}"
 	{{end}}
 
 	"github.com/spf13/cobra"
@@ -103,8 +102,7 @@ import (
 
 func init() {
 	for _, c := range []*cobra.Command{
-		{{range .}}
-		day{{.}}.Cmd,
+		{{range .}}day{{.}}.Cmd,
 		{{end}}
 	} {
 		rootCmd.AddCommand(c)
