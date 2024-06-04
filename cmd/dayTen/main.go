@@ -110,14 +110,19 @@ type Position struct {
 	X, Y              int
 	Type              Pipe
 	DistanceFromStart int
+	TouchesEdge       bool
 }
 
 func (p *Position) String() string {
 	return fmt.Sprintf("Position{X: %d, Y: %d, Type: %s, Dist: %d}", p.X, p.Y, p.Type, p.DistanceFromStart)
 }
 
-func (p *Position) SetDistanceFromStart(d int) {
-	p.DistanceFromStart = d
+func (p *Position) IsGroundEdge() bool {
+	return p.TouchesEdge && p.Type == Ground
+}
+
+func (p *Position) IsTrappedPosition() bool {
+	return !p.TouchesEdge && !(p.DistanceFromStart >= 0)
 }
 
 func CanNorth(p *Position) bool {
@@ -224,6 +229,9 @@ func parse(path string) *Grid {
 				Type:              NewPipe(r),
 				DistanceFromStart: -1,
 			}
+			if x == 0 || x == len(text)-1 || y == 0 {
+				newPos.TouchesEdge = true
+			}
 			row = append(row, newPos)
 			if newPos.Type == Start {
 				g.StartX = x
@@ -233,6 +241,10 @@ func parse(path string) *Grid {
 		}
 		g.rows = append(g.rows, row)
 		y++
+	}
+
+	for _, p := range g.rows[len(g.rows)-1] {
+		p.TouchesEdge = true
 	}
 
 	return g
@@ -275,6 +287,55 @@ func calculateDistance(g *Grid, p *Position, distanceFromStart int) int {
 	return p.DistanceFromStart
 }
 
+func (g *Grid) ExpandGroundEdges() {
+	// start with all ground edges and expand until hitting another ground edge, a path pipe, or the edge
+	// of the grid
+	toVisit := []*Position{}
+	for _, row := range g.rows {
+		for _, p := range row {
+			if p.IsGroundEdge() {
+				toVisit = append(toVisit, p)
+			}
+		}
+	}
+
+	for len(toVisit) > 0 {
+		p := toVisit[0]
+		toVisit = toVisit[1:]
+
+		// visit neighbors
+		for _, n := range []*Position{
+			g.Get(p.X, p.Y-1),
+			g.Get(p.X, p.Y+1),
+			g.Get(p.X-1, p.Y),
+			g.Get(p.X+1, p.Y),
+		} {
+			if n == nil {
+				continue
+			}
+
+			// New path to the edge!
+			if n.Type == Ground && !n.TouchesEdge {
+				n.TouchesEdge = true
+				toVisit = append(toVisit, n)
+			}
+		}
+	}
+}
+
+func (g *Grid) CountTrappedGround() int {
+	count := 0
+	for _, row := range g.rows {
+		for _, p := range row {
+			if p.IsTrappedPosition() {
+				count++
+			}
+		}
+	}
+
+	return count
+}
+
 func partOne(puzzleFile string) {
 	// dayTen.simple.input is 4
 	// dayTen.complex.input is 8
@@ -292,6 +353,19 @@ func partOne(puzzleFile string) {
 
 func partTwo(puzzleFile string) {
 	slog.Info("Day Ten part two", "puzzle file", puzzleFile)
+
+	// populate all edge locations and the path with non-negative values
+	grid := parse(puzzleFile)
+	for _, c := range grid.GetStart().Connections(grid) {
+		calculateDistance(grid, c, 1)
+	}
+
+	grid.ExpandGroundEdges()
+	trappedGround := grid.CountTrappedGround()
+
+	slog.Debug("distance calculated", "grid", grid.String())
+
+	slog.Info("Day Ten part two", "trapped ground", trappedGround)
 }
 
 var Cmd = &cobra.Command{
