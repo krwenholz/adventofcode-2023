@@ -106,6 +106,23 @@ func (g *Grid) DistancesString() string {
 	return str
 }
 
+func (g *Grid) PartTwoString() string {
+	str := ""
+	for _, row := range g.rows {
+		for _, p := range row {
+			if p.IsTrappedPosition() {
+				str += "I "
+			} else if p.IsPath() {
+				str += p.Type.String() + " "
+			} else if p.IsEdgePosition() {
+				str += "O "
+			}
+		}
+		str += "\n"
+	}
+	return str
+}
+
 type Position struct {
 	X, Y              int
 	Type              Pipe
@@ -117,12 +134,16 @@ func (p *Position) String() string {
 	return fmt.Sprintf("Position{X: %d, Y: %d, Type: %s, Dist: %d}", p.X, p.Y, p.Type, p.DistanceFromStart)
 }
 
-func (p *Position) IsGroundEdge() bool {
-	return p.TouchesEdge && p.Type == Ground
+func (p *Position) IsPath() bool {
+	return p.DistanceFromStart >= 0
+}
+
+func (p *Position) IsEdgePosition() bool {
+	return p.TouchesEdge
 }
 
 func (p *Position) IsTrappedPosition() bool {
-	return !p.TouchesEdge && !(p.DistanceFromStart >= 0)
+	return !p.TouchesEdge && !p.IsPath()
 }
 
 func CanNorth(p *Position) bool {
@@ -287,13 +308,13 @@ func calculateDistance(g *Grid, p *Position, distanceFromStart int) int {
 	return p.DistanceFromStart
 }
 
-func (g *Grid) ExpandGroundEdges() {
+func (g *Grid) ExpandGroundPositions() {
 	// start with all ground edges and expand until hitting another ground edge, a path pipe, or the edge
 	// of the grid
 	toVisit := []*Position{}
 	for _, row := range g.rows {
 		for _, p := range row {
-			if p.IsGroundEdge() {
+			if p.IsEdgePosition() {
 				toVisit = append(toVisit, p)
 			}
 		}
@@ -315,7 +336,7 @@ func (g *Grid) ExpandGroundEdges() {
 			}
 
 			// New path to the edge!
-			if n.Type == Ground && !n.TouchesEdge {
+			if !n.TouchesEdge && !n.IsPath() {
 				n.TouchesEdge = true
 				toVisit = append(toVisit, n)
 			}
@@ -328,6 +349,37 @@ func (g *Grid) CountTrappedGround() int {
 	for _, row := range g.rows {
 		for _, p := range row {
 			if p.IsTrappedPosition() {
+				count++
+			}
+		}
+	}
+
+	return count
+}
+
+func (g *Grid) CountTrappedWithRay() int {
+	// Assume we ran flood fil first. Then we will only need to special case the trapped sections
+	// to double check they actually are.
+	count := 0
+	for _, row := range g.rows {
+		wallCount := 0
+		for _, p := range row {
+			if p.IsPath() {
+				// https://www.reddit.com/r/adventofcode/comments/18evyu9/2023_day_10_solutions/
+				// we can use a ray to check if it is trapped:
+				// https://en.wikipedia.org/wiki/Point_in_polygon#Ray_casting_algorithm
+				switch p.Type {
+				case Vertical:
+					wallCount++
+				case NinetyDegreeNorthEast: // L
+					wallCount++
+				case NinetyDegreeNorthWest: // J
+					wallCount++
+				}
+				continue
+			}
+			if wallCount%2 == 1 {
+				slog.Debug("counting trapped position", "p", p, "wallCount", wallCount)
 				count++
 			}
 		}
@@ -360,12 +412,14 @@ func partTwo(puzzleFile string) {
 		calculateDistance(grid, c, 1)
 	}
 
-	grid.ExpandGroundEdges()
-	trappedGround := grid.CountTrappedGround()
+	//grid.ExpandGroundPositions()
+	trappedCount := grid.CountTrappedWithRay()
+	//trappedCount := grid.CountTrappedGround()
 
 	slog.Debug("distance calculated", "grid", grid.String())
 
-	slog.Info("Day Ten part two", "trapped ground", trappedGround)
+	os.WriteFile("inputs/dayTen-partTwo.txt", []byte(grid.PartTwoString()), 0644)
+	slog.Info("Day Ten part two", "trapped count", trappedCount)
 }
 
 var Cmd = &cobra.Command{
