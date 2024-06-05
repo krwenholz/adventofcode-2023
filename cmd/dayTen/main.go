@@ -375,6 +375,8 @@ func (g *Grid) CountTrappedWithRay() int {
 					wallCount++
 				case NinetyDegreeNorthWest: // J
 					wallCount++
+				case Start:
+					wallCount++
 				}
 				continue
 			}
