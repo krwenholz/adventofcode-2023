@@ -13,6 +13,8 @@ import (
 	"gonum.org/v1/gonum/stat/combin"
 )
 
+const ONE_MILLION = 1000000
+
 /**
 build list of all galaxy coordinates
 determine rows and columns with no galaxies using that list
@@ -134,13 +136,13 @@ func partOne(puzzleFile string) {
 
 		// Normal space (manhattan) distance
 		distance := maxX - minX + maxY - minY
+		slog.Debug("combination distance", "combination", indices, "distance", distance)
 		// Add one for every empty row or column between the galaxies
 		for row := minY + 1; row < maxY; row++ {
 			if observation.EmptyRows[row] {
 				distance++
 			}
 		}
-		slog.Debug("combination distance", "combination", indices, "distance", distance)
 		for col := minX + 1; col < maxX; col++ {
 			if observation.EmptyCols[col] {
 				distance++
@@ -162,7 +164,50 @@ func partOne(puzzleFile string) {
 }
 
 func partTwo(puzzleFile string) {
-	slog.Info("Day Eleven part two", "puzzle file", puzzleFile)
+	observation := parse(puzzleFile)
+	os.WriteFile("inputs/dayElevenObservations.json", []byte(observation.String()), 0644)
+
+	combinationIndices := combin.Combinations(len(observation.Galaxies), 2)
+	sum := 0
+	for _, indices := range combinationIndices {
+		g1 := observation.GetGalaxyById(indices[0])
+		g2 := observation.GetGalaxyById(indices[1])
+		maxX := int(math.Max(float64(g1.X), float64(g2.X)))
+		minX := int(math.Min(float64(g1.X), float64(g2.X)))
+		maxY := int(math.Max(float64(g1.Y), float64(g2.Y)))
+		minY := int(math.Min(float64(g1.Y), float64(g2.Y)))
+
+		// Normal space (manhattan) distance
+		distance := maxX - minX + maxY - minY
+		slog.Debug("combination distance", "combination", indices, "distance", distance)
+		// Add one for every empty row or column between the galaxies
+		expandedDistances := 0
+		for row := minY + 1; row < maxY; row++ {
+			if observation.EmptyRows[row] {
+				expandedDistances++
+			}
+		}
+		for col := minX + 1; col < maxX; col++ {
+			if observation.EmptyCols[col] {
+				expandedDistances++
+			}
+		}
+
+		distance = (distance - expandedDistances) + expandedDistances*ONE_MILLION
+
+		if distance < g1.ClosestDistance || g1.ClosestGalaxy == nil {
+			g1.ClosestDistance = distance
+			g1.ClosestGalaxy = g2
+		}
+		if distance < g2.ClosestDistance || g2.ClosestGalaxy == nil {
+			g2.ClosestDistance = distance
+			g2.ClosestGalaxy = g1
+		}
+
+		sum += distance
+	}
+
+	slog.Info("Day Eleven part two", "sum", sum)
 }
 
 var Cmd = &cobra.Command{
