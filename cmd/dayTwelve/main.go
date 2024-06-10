@@ -67,12 +67,13 @@ func GenerateOptions(unknownCount int) [][]Condition {
 		for _, o := range ret {
 			slog.Debug("processing option", "option", o)
 			newOperational := make([]Condition, len(o)+1)
-			newOperational = append(o, Operational)
-			newDamaged := append(o, Damaged)
-			slog.Debug("will add", "operational", newOperational, "damaged", newDamaged)
+			copy(newOperational, o)
+			newOperational[len(o)] = Operational
+			newDamaged := make([]Condition, len(o)+1)
+			copy(newDamaged, o)
+			newDamaged[len(o)] = Damaged
 			n = append(n, newOperational, newDamaged)
 		}
-		slog.Debug("generated options", "options", n)
 		ret = n
 	}
 	return ret
