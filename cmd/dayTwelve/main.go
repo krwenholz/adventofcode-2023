@@ -60,12 +60,11 @@ func (c ConditionRecord) UnknownCount() int {
 
 }
 
-func GenerateOptions(unknownCount int) [][]Condition {
+func GenerateReplacementCandidates(unknownCount int) [][]Condition {
 	ret := make([][]Condition, 1)
 	for i := 0; i < unknownCount; i++ {
 		n := make([][]Condition, 0)
 		for _, o := range ret {
-			slog.Debug("processing option", "option", o)
 			newOperational := make([]Condition, len(o)+1)
 			copy(newOperational, o)
 			newOperational[len(o)] = Operational
@@ -89,9 +88,13 @@ func IsValid(cs []string, replacements []Condition, sizes []int) bool {
 			c = replacements[replacementsIndex]
 			replacementsIndex++
 		}
+
 		switch c {
 		case Operational:
 			if damagedCount > 0 {
+				if sizesIndex >= len(sizes) {
+					return false
+				}
 				if damagedCount != sizes[sizesIndex] {
 					return false
 				}
@@ -106,9 +109,17 @@ func IsValid(cs []string, replacements []Condition, sizes []int) bool {
 	}
 
 	if damagedCount > 0 {
+		if sizesIndex >= len(sizes) {
+			return false
+		}
 		if damagedCount != sizes[sizesIndex] {
 			return false
 		}
+		sizesIndex++
+	}
+
+	if sizesIndex < len(sizes) {
+		return false
 	}
 
 	return true
@@ -133,12 +144,13 @@ func partOne(puzzleFile string) {
 	sumOptions := 0
 	for sc.Scan() {
 		r := sc.Struct()
-		options := GenerateOptions(r.UnknownCount())
+		slog.Debug("Checking Record", "record", r, "unknown count", r.UnknownCount())
+		replacementsCandidates := GenerateReplacementCandidates(r.UnknownCount())
 		validOptions := make([][]Condition, 0)
-		for _, option := range options {
-			slog.Debug("checking option", "option", option)
-			if IsValid(r.Conditions, option, r.GroupSizes) {
-				validOptions = append(validOptions, option)
+		for _, replacements := range replacementsCandidates {
+			slog.Debug("checking option", "replacements", replacements)
+			if IsValid(r.Conditions, replacements, r.GroupSizes) {
+				validOptions = append(validOptions, replacements)
 			}
 		}
 		sumOptions += len(validOptions)
