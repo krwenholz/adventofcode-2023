@@ -45,11 +45,16 @@ func NewCondition(r rune) Condition {
 }
 
 type ConditionRecord struct {
-	Conditions []string `@("#" | "." | "?")+`
-	GroupSizes []int    `(@Int ","?)+`
+	Conditions     []string `@("#" | "." | "?")+`
+	GroupSizes     []int    `(@Int ","?)+`
+	TrueConditions []Condition
+	conditionsI    int
+	sizesI         int
+	truesI         int
+	damagedCount   int
 }
 
-func (c ConditionRecord) UnknownCount() int {
+func (c *ConditionRecord) UnknownCount() int {
 	count := 0
 	for _, cond := range c.Conditions {
 		if NewCondition(rune(cond[0])) == Unknown {
@@ -60,65 +65,79 @@ func (c ConditionRecord) UnknownCount() int {
 
 }
 
-func GenerateReplacementCandidates(unknownCount int) [][]Condition {
-	ret := make([][]Condition, 1)
-	for i := 0; i < unknownCount; i++ {
-		n := make([][]Condition, 0)
-		for _, o := range ret {
-			newOperational := make([]Condition, len(o)+1)
-			copy(newOperational, o)
-			newOperational[len(o)] = Operational
-			newDamaged := make([]Condition, len(o)+1)
-			copy(newDamaged, o)
-			newDamaged[len(o)] = Damaged
-			n = append(n, newOperational, newDamaged)
+func (c *ConditionRecord) GenerateReplacements() []*ConditionRecord {
+	ret := []*ConditionRecord{c}
+	for i := 0; i < c.UnknownCount(); i++ {
+		newRs := make([]*ConditionRecord, 0)
+		for _, cr := range ret {
+			for _, cond := range []Condition{Operational, Damaged} {
+				newR := &ConditionRecord{
+					Conditions:     cr.Conditions,
+					GroupSizes:     cr.GroupSizes,
+					TrueConditions: cr.TrueConditions,
+					conditionsI:    cr.conditionsI,
+					sizesI:         cr.sizesI,
+					truesI:         cr.truesI,
+					damagedCount:   cr.damagedCount,
+				}
+				newR.TrueConditions = append(newR.TrueConditions, cond)
+				if newR.IsValid() {
+					slog.Debug("found replacement", "replacement", newR, "sizes", newR.StringSizes())
+					newRs = append(newRs, newR)
+				}
+			}
 		}
-		ret = n
+		ret = newRs
 	}
 	return ret
 }
 
-func IsValid(cs []string, replacements []Condition, sizes []int) bool {
-	damagedCount := 0
-	replacementsIndex := 0
-	sizesIndex := 0
-	for _, cond := range cs {
-		c := NewCondition(rune(cond[0]))
-		if c == Unknown {
-			c = replacements[replacementsIndex]
-			replacementsIndex++
+func (c *ConditionRecord) IsValid() bool {
+	for c.conditionsI < len(c.Conditions) {
+		cond := NewCondition(rune(c.Conditions[c.conditionsI][0]))
+		if cond == Unknown {
+			if c.truesI >= len(c.TrueConditions) {
+				// we need more replacement options
+				return c.UnknownCount() != len(c.TrueConditions)
+			}
+
+			cond = c.TrueConditions[c.truesI]
+			c.truesI++
 		}
 
-		switch c {
+		switch cond {
 		case Operational:
-			if damagedCount > 0 {
-				if sizesIndex >= len(sizes) {
+			if c.damagedCount > 0 {
+				if c.sizesI >= len(c.GroupSizes) {
 					return false
 				}
-				if damagedCount != sizes[sizesIndex] {
+				if c.damagedCount != c.GroupSizes[c.sizesI] {
 					return false
 				}
-				damagedCount = 0
-				sizesIndex++
+				c.damagedCount = 0
+				c.sizesI++
 			}
 		case Damaged:
-			damagedCount++
+			c.damagedCount++
 		default:
 			panic("Invalid condition")
 		}
+		c.conditionsI++
 	}
 
-	if damagedCount > 0 {
-		if sizesIndex >= len(sizes) {
+	if c.damagedCount > 0 {
+		if c.sizesI >= len(c.GroupSizes) {
 			return false
 		}
-		if damagedCount != sizes[sizesIndex] {
+		if c.damagedCount != c.GroupSizes[c.sizesI] {
 			return false
 		}
-		sizesIndex++
+		if c.conditionsI == len(c.Conditions) {
+			c.sizesI++
+		}
 	}
 
-	if sizesIndex < len(sizes) {
+	if c.conditionsI == len(c.Conditions) && c.sizesI < len(c.GroupSizes) {
 		return false
 	}
 
@@ -126,7 +145,22 @@ func IsValid(cs []string, replacements []Condition, sizes []int) bool {
 }
 
 func (c ConditionRecord) String() string {
-	return fmt.Sprintf("Conditions: %v, GroupSizes: %v", c.Conditions, c.GroupSizes)
+	return fmt.Sprintf(
+		"Conditions: %v, GroupSizes: %v, TrueConditions: %v",
+		c.Conditions,
+		c.GroupSizes,
+		c.TrueConditions,
+	)
+}
+
+func (c ConditionRecord) StringSizes() string {
+	return fmt.Sprintf(
+		"conditionsI: %d, sizesI: %d, truesI: %d, damagedCount: %d",
+		c.conditionsI,
+		c.sizesI,
+		c.truesI,
+		c.damagedCount,
+	)
 }
 
 func newScanner(puzzleFile string) *scanner.PuzzleScanner[ConditionRecord] {
@@ -145,17 +179,10 @@ func partOne(puzzleFile string) {
 	for sc.Scan() {
 		r := sc.Struct()
 		slog.Debug("Checking Record", "record", r, "unknown count", r.UnknownCount())
-		replacementsCandidates := GenerateReplacementCandidates(r.UnknownCount())
-		validOptions := make([][]Condition, 0)
-		for _, replacements := range replacementsCandidates {
-			slog.Debug("checking option", "replacements", replacements)
-			if IsValid(r.Conditions, replacements, r.GroupSizes) {
-				validOptions = append(validOptions, replacements)
-			}
-		}
-		sumOptions += len(validOptions)
+		replacementOptions := r.GenerateReplacements()
+		sumOptions += len(replacementOptions)
 
-		slog.Debug("parsed record", "record", r, "total valid", len(validOptions), "valid options", validOptions)
+		slog.Debug("parsed record", "record", r, "total valid", len(replacementOptions), "valid options", replacementOptions)
 	}
 
 	slog.Info("finished day twelve part one", "sum options", sumOptions)
@@ -163,6 +190,22 @@ func partOne(puzzleFile string) {
 
 func partTwo(puzzleFile string) {
 	slog.Info("Day Twelve part two", "puzzle file", puzzleFile)
+	sc := newScanner(puzzleFile)
+
+	sumOptions := 0
+	for sc.Scan() {
+		r := sc.Struct()
+		for i := 0; i < 4; i++ {
+			r.Conditions = append(r.Conditions, "?")
+			r.Conditions = append(r.Conditions, r.Conditions...)
+			r.GroupSizes = append(r.GroupSizes, r.GroupSizes...)
+		}
+		slog.Debug("Checking Record", "record", r, "unknown count", r.UnknownCount())
+		replacementOptions := r.GenerateReplacements()
+		sumOptions += len(replacementOptions)
+	}
+
+	slog.Info("finished day twelve part two", "sum options", sumOptions)
 }
 
 var Cmd = &cobra.Command{
