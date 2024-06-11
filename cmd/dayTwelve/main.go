@@ -45,13 +45,35 @@ func NewCondition(r rune) Condition {
 }
 
 type ConditionRecord struct {
-	Conditions     []string `@("#" | "." | "?")+`
-	GroupSizes     []int    `(@Int ","?)+`
+	Conditions []string `@("#" | "." | "?")+`
+	GroupSizes []int    `(@Int ","?)+`
+}
+
+type TrueCondition struct {
 	TrueConditions []Condition
 	conditionsI    int
 	sizesI         int
 	truesI         int
 	damagedCount   int
+}
+
+func (c ConditionRecord) String() string {
+	return fmt.Sprintf(
+		"Conditions: %v, GroupSizes: %v",
+		c.Conditions,
+		c.GroupSizes,
+	)
+}
+
+func (t TrueCondition) String() string {
+	return fmt.Sprintf(
+		"trues: %v, conditionsI: %d, sizesI: %d, truesI: %d, damagedCount: %d",
+		t.TrueConditions,
+		t.conditionsI,
+		t.sizesI,
+		t.truesI,
+		t.damagedCount,
+	)
 }
 
 func (c *ConditionRecord) UnknownCount() int {
@@ -65,102 +87,81 @@ func (c *ConditionRecord) UnknownCount() int {
 
 }
 
-func (c *ConditionRecord) GenerateReplacements() []*ConditionRecord {
-	ret := []*ConditionRecord{c}
+func (c *ConditionRecord) GenerateReplacements() []*TrueCondition {
+	ret := []*TrueCondition{{TrueConditions: make([]Condition, 0)}}
 	for i := 0; i < c.UnknownCount(); i++ {
-		newRs := make([]*ConditionRecord, 0)
-		for _, cr := range ret {
+		newTCs := make([]*TrueCondition, 0)
+		for _, tc := range ret {
 			for _, cond := range []Condition{Operational, Damaged} {
-				newR := &ConditionRecord{
-					Conditions:     cr.Conditions,
-					GroupSizes:     cr.GroupSizes,
-					TrueConditions: cr.TrueConditions,
-					conditionsI:    cr.conditionsI,
-					sizesI:         cr.sizesI,
-					truesI:         cr.truesI,
-					damagedCount:   cr.damagedCount,
+				newTC := &TrueCondition{
+					TrueConditions: tc.TrueConditions,
+					conditionsI:    tc.conditionsI,
+					sizesI:         tc.sizesI,
+					truesI:         tc.truesI,
+					damagedCount:   tc.damagedCount,
 				}
-				newR.TrueConditions = append(newR.TrueConditions, cond)
-				if newR.IsValid() {
-					slog.Debug("found replacement", "replacement", newR, "sizes", newR.StringSizes())
-					newRs = append(newRs, newR)
+				newTC.TrueConditions = append(newTC.TrueConditions, cond)
+				if c.IsValid(newTC) {
+					slog.Debug("found replacement", "cond", c, "tc", newTC)
+					newTCs = append(newTCs, newTC)
 				}
 			}
 		}
-		ret = newRs
+		ret = newTCs
 	}
 	return ret
 }
 
-func (c *ConditionRecord) IsValid() bool {
-	for c.conditionsI < len(c.Conditions) {
-		cond := NewCondition(rune(c.Conditions[c.conditionsI][0]))
+func (c *ConditionRecord) IsValid(tc *TrueCondition) bool {
+	for tc.conditionsI < len(c.Conditions) {
+		cond := NewCondition(rune(c.Conditions[tc.conditionsI][0]))
 		if cond == Unknown {
-			if c.truesI >= len(c.TrueConditions) {
+			if tc.truesI >= len(tc.TrueConditions) {
 				// we need more replacement options
-				return c.UnknownCount() != len(c.TrueConditions)
+				return c.UnknownCount() != len(tc.TrueConditions)
 			}
 
-			cond = c.TrueConditions[c.truesI]
-			c.truesI++
+			cond = tc.TrueConditions[tc.truesI]
+			tc.truesI++
 		}
 
 		switch cond {
 		case Operational:
-			if c.damagedCount > 0 {
-				if c.sizesI >= len(c.GroupSizes) {
+			if tc.damagedCount > 0 {
+				if tc.sizesI >= len(c.GroupSizes) {
 					return false
 				}
-				if c.damagedCount != c.GroupSizes[c.sizesI] {
+				if tc.damagedCount != c.GroupSizes[tc.sizesI] {
 					return false
 				}
-				c.damagedCount = 0
-				c.sizesI++
+				tc.damagedCount = 0
+				tc.sizesI++
 			}
 		case Damaged:
-			c.damagedCount++
+			tc.damagedCount++
 		default:
 			panic("Invalid condition")
 		}
-		c.conditionsI++
+		tc.conditionsI++
 	}
 
-	if c.damagedCount > 0 {
-		if c.sizesI >= len(c.GroupSizes) {
+	if tc.damagedCount > 0 {
+		if tc.sizesI >= len(c.GroupSizes) {
 			return false
 		}
-		if c.damagedCount != c.GroupSizes[c.sizesI] {
+		if tc.damagedCount != c.GroupSizes[tc.sizesI] {
 			return false
 		}
-		if c.conditionsI == len(c.Conditions) {
-			c.sizesI++
+		if tc.conditionsI == len(c.Conditions) {
+			tc.sizesI++
 		}
 	}
 
-	if c.conditionsI == len(c.Conditions) && c.sizesI < len(c.GroupSizes) {
+	if tc.conditionsI == len(c.Conditions) && tc.sizesI < len(c.GroupSizes) {
 		return false
 	}
 
 	return true
-}
-
-func (c ConditionRecord) String() string {
-	return fmt.Sprintf(
-		"Conditions: %v, GroupSizes: %v, TrueConditions: %v",
-		c.Conditions,
-		c.GroupSizes,
-		c.TrueConditions,
-	)
-}
-
-func (c ConditionRecord) StringSizes() string {
-	return fmt.Sprintf(
-		"conditionsI: %d, sizesI: %d, truesI: %d, damagedCount: %d",
-		c.conditionsI,
-		c.sizesI,
-		c.truesI,
-		c.damagedCount,
-	)
 }
 
 func newScanner(puzzleFile string) *scanner.PuzzleScanner[ConditionRecord] {
