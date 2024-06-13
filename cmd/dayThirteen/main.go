@@ -2,7 +2,6 @@ package dayThirteen
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"log/slog"
 	"math/bits"
@@ -13,14 +12,126 @@ import (
 )
 
 /**
-121122112
- 211221121
+101100110
+ 011001101
 
  one shift plus half (4) means five is shift point
 **/
 
 func fmtBinary(b uint) string {
-	return fmt.Sprintf("%064b", b)
+	return strconv.FormatUint(uint64(b), 2)
+}
+
+/*
+*
+
+	func zeroEnough(left, right uint, mirrorL int) bool {
+		diffL := left - right
+		diffR := right - left
+		slog.Debug("diff", "left", fmtBinary(left), "right", fmtBinary(right), "mirrorL", mirrorL, "diffL", fmtBinary(diffL), "diffR", fmtBinary(diffR))
+		return (diffL == 0 || bits.TrailingZeros(diffL) == mirrorL ||
+			diffR == 0 || bits.TrailingZeros(diffR) == mirrorL)
+	}
+
+*
+*/
+
+func mask(l int) uint {
+	bs := ""
+	for i := 0; i < l; i++ {
+		bs = bs + "1"
+	}
+
+	r, _ := strconv.ParseInt(bs, 2, 10)
+	return uint(r)
+}
+
+func zeroEnough(left, right uint, originalL, shift int) bool {
+	left = left & mask(originalL-shift)
+	right >>= shift
+
+	diff := left - right
+	slog.Debug("diff", "left", fmtBinary(left), "right", fmtBinary(right), "originalL", originalL, "shift", shift, "diff", fmtBinary(diff))
+	return diff == 0 || bits.TrailingZeros(diff) == originalL-shift
+}
+
+func splitIndex(p []string) int {
+	initialShifts := make([]int, 0)
+	for i := 0; i < len(p[0]); i++ {
+		initialShifts = append(initialShifts, i)
+	}
+	validShifts := [][]int{initialShifts}
+
+	for _, r := range p {
+		previousShifts := validShifts[len(validShifts)-1]
+		if len(previousShifts) == 0 {
+			continue
+		}
+
+		theseShifts := []int{}
+		firstShift := previousShifts[0]
+		tmp, _ := strconv.ParseInt(r, 2, 10)
+		bin := uint(tmp)
+		tmpR := make([]rune, len(r))
+		for i, c := range r {
+			tmpR[len(tmpR)-i-1] = c
+		}
+		tmp, _ = strconv.ParseInt(string(tmpR), 2, 10)
+		binR := uint(tmp)
+
+		if zeroEnough(bin, binR, len(r), firstShift) {
+			theseShifts = append(theseShifts, firstShift)
+		}
+
+		for _, s := range previousShifts[1:] {
+			if zeroEnough(bin, binR, len(r), s) {
+				theseShifts = append(theseShifts, s)
+			}
+		}
+		validShifts = append(validShifts, theseShifts)
+	}
+
+	slog.Debug(
+		"finished computing shifts",
+		"validShifts", validShifts,
+	)
+
+	if len(validShifts) >= len(p) && len(validShifts[len(validShifts)-1]) > 0 {
+		splitIdx := validShifts[len(validShifts)-1][0]
+		return splitIdx
+	}
+	return 0
+}
+
+func verticalLeftSplit(pattern []string) int {
+	leftSplitIdx := splitIndex(pattern)
+	if leftSplitIdx > 0 {
+		// shifts + half the mirror length
+		leftSplitIdx = leftSplitIdx + (len(pattern[0])-leftSplitIdx)/2
+	}
+	slog.Debug(
+		"finished computing valid vertical split",
+		"left split index", leftSplitIdx)
+	return leftSplitIdx
+}
+
+func horizontalAboveSplit(pattern []string) int {
+	rotatedPattern := make([]string, len(pattern[0]))
+	for i := 0; i < len(pattern[0]); i++ {
+		for j := 0; j < len(pattern); j++ {
+			rotatedPattern[i] = rotatedPattern[i] + string(pattern[j][i])
+		}
+	}
+	slog.Debug("rotated pattern", "p", rotatedPattern)
+	aboveSplitIdx := splitIndex(rotatedPattern)
+	if aboveSplitIdx > 0 {
+		// shifts + half the mirror length
+		aboveSplitIdx = aboveSplitIdx + (len(pattern)-aboveSplitIdx)/2
+	}
+	slog.Debug(
+		"finished computing valid horizontal split",
+		"above split index", aboveSplitIdx)
+	return aboveSplitIdx
 }
 
 func partOne(puzzleFile string) {
@@ -50,56 +161,24 @@ func partOne(puzzleFile string) {
 		patterns[len(patterns)-1] = append(patterns[len(patterns)-1], row)
 	}
 
-	verticalLeftSum := -1
-	horizontalAboveSum := -1
+	verticalLeftSum := 0
+	horizontalAboveSum := 0
 
-	for _, p := range patterns {
-		// try horizontal
-		initialShifts := make([]int, 0)
-		for i := 0; i < len(p[0]); i++ {
-			initialShifts = append(initialShifts, i)
-		}
-		validShifts := [][]int{initialShifts}
-
-		for _, r := range p {
-			previousShifts := validShifts[len(validShifts)-1]
-			if len(previousShifts) == 0 {
-				continue
-			}
-
-			theseShifts := []int{}
-			tmp, _ := strconv.ParseInt(r, 2, 10)
-			bin := uint(tmp)
-			tmpR := []rune{}
-			for _, c := range r {
-				tmpR = append(tmpR, c)
-			}
-			tmp, _ = strconv.ParseInt(string(tmpR), 2, 10)
-			binR := uint(tmp)
-
-			diff, _ := bits.Sub(bin, binR, 0)
-			if diff == 0 {
-				theseShifts = append(theseShifts, 0)
-			}
-			for _, s := range previousShifts {
-				sBin := bin >> s
-				sBinR := binR << s
-
-				diff, _ := bits.Sub(sBin, sBinR, 0)
-				slog.Debug("diff", "bin", fmtBinary(sBin), "binR", fmtBinary(sBinR), "diff", fmtBinary(diff))
-				if diff == 0 {
-					theseShifts = append(theseShifts, s)
-				}
-			}
-			validShifts = append(validShifts, theseShifts)
-		}
-		slog.Debug("finished computing valid vertical shifts", "validShifts", validShifts)
-
-		if len(validShifts) == len(p[0]) {
-			verticalLeftSum += validShifts[len(validShifts)-1][0]
-		}
-
+	for i, p := range patterns {
 		// try vertical
+		l := verticalLeftSplit(p)
+		verticalLeftSum += l
+
+		// try horizontal
+		h := horizontalAboveSplit(p)
+		horizontalAboveSum += h
+
+		slog.Debug(
+			"finished computing split",
+			"pattern", i,
+			"vert", l,
+			"horizontal", h,
+		)
 	}
 
 	slog.Info("Finished day thirteen part one", "summary", verticalLeftSum+horizontalAboveSum*100)
