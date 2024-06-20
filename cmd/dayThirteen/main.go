@@ -43,11 +43,8 @@ func mirror(original uint16, length, mirrorPoint int) bool {
 	left &= lmask(length, mirrorPoint)
 
 	reversed := bits.Reverse16(original)
-	fmt.Println(fmtBinary(reversed))
 	reversed >>= (16 - (length - mirrorPoint))
-	fmt.Println(fmtBinary(reversed))
 	reversed &= rmask(length, mirrorPoint)
-	fmt.Println(fmtBinary(reversed))
 
 	diff := left - reversed
 
@@ -71,7 +68,7 @@ func mirror(original uint16, length, mirrorPoint int) bool {
 
 func splitIndex(p []string) int {
 	initialShifts := make([]int, 0)
-	for i := len(p[0]) / 2; i < len(p[0]); i++ {
+	for i := 1; i < len(p[0]); i++ {
 		initialShifts = append(initialShifts, i)
 	}
 	validShifts := [][]int{initialShifts}
@@ -187,7 +184,7 @@ func partOne(puzzleFile string) {
 		)
 	}
 
-	slog.Info("Finished day thirteen part one", "expected", ans, "summary", verticalLeftSum+horizontalAboveSum*100)
+	slog.Info("Finished day thirteen part one", "expected", ans, "value", verticalLeftSum+horizontalAboveSum*100)
 }
 
 func partTwo(puzzleFile string) {
