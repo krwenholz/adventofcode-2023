@@ -20,30 +20,30 @@ import (
  one shift plus half (4) means five is shift point
 **/
 
-func fmtBinary(b uint16) string {
-	return fmt.Sprintf("%016b", b)
+func fmtBinary(b uint32) string {
+	return fmt.Sprintf("%032b", b)
 }
 
-func lmask(length, mirrorPoint int) uint16 {
+func lmask(length, mirrorPoint int) uint32 {
 	if mirrorPoint > length/2 {
-		return uint16(math.Pow(2, float64(length-mirrorPoint)) - 1)
+		return uint32(math.Pow(2, float64(length-mirrorPoint)) - 1)
 	}
-	return uint16(math.Pow(2, 16) - 1)
+	return uint32(math.Pow(2, 32) - 1)
 }
 
-func rmask(length, mirrorPoint int) uint16 {
+func rmask(length, mirrorPoint int) uint32 {
 	if mirrorPoint <= length/2 {
-		return uint16(math.Pow(2, float64(mirrorPoint)) - 1)
+		return uint32(math.Pow(2, float64(mirrorPoint)) - 1)
 	}
-	return uint16(math.Pow(2, float64(length-mirrorPoint)) - 1)
+	return uint32(math.Pow(2, float64(length-mirrorPoint)) - 1)
 }
 
-func mirror(original uint16, length, mirrorPoint int) bool {
+func mirror(original uint32, length, mirrorPoint int) bool {
 	left := original >> (length - mirrorPoint)
 	left &= lmask(length, mirrorPoint)
 
-	reversed := bits.Reverse16(original)
-	reversed >>= (16 - (length - mirrorPoint))
+	reversed := bits.Reverse32(original)
+	reversed >>= (32 - (length - mirrorPoint))
 	reversed &= rmask(length, mirrorPoint)
 
 	diff := left - reversed
@@ -81,8 +81,8 @@ func splitIndex(p []string) int {
 
 		theseShifts := []int{}
 		firstShift := previousShifts[0]
-		tmp, _ := strconv.ParseInt(r, 2, 10)
-		bin := uint16(tmp)
+		tmp, _ := strconv.ParseInt(r, 2, 32)
+		bin := uint32(tmp)
 
 		if mirror(bin, len(r), firstShift) {
 			theseShifts = append(theseShifts, firstShift)
