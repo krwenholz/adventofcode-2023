@@ -13,9 +13,7 @@
   // run arguments passed to docker
   "runArgs": ["--security-opt", "label=disable"],
 
-  "mounts": [
-    "source=krwenholz-adventofcode-2023_nix,target=/nix,type=volume"
-  ],
+  "mounts": ["source=krwenholz-adventofcode-2023_nix,target=/nix,type=volume"],
 
   "containerEnv": {
     // extensions to preload before other extensions
@@ -46,5 +44,5 @@
   "forwardPorts": []
 
   // Use 'postCreateCommand' to run commands after the container is created.
-  //"postCreateCommand": "nix run . -- build --flake . && nix run . -- switch --flake ."
+  //"postCreateCommand": "nix run home-manager/release-24.05 -- switch --flake "github:krwenholz/dotfiles#$(whoami)@$(uname -m)""
 }
