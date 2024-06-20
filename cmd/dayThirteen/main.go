@@ -22,20 +22,6 @@ func fmtBinary(b uint) string {
 	return strconv.FormatUint(uint64(b), 2)
 }
 
-/*
-*
-
-	func zeroEnough(left, right uint, mirrorL int) bool {
-		diffL := left - right
-		diffR := right - left
-		slog.Debug("diff", "left", fmtBinary(left), "right", fmtBinary(right), "mirrorL", mirrorL, "diffL", fmtBinary(diffL), "diffR", fmtBinary(diffR))
-		return (diffL == 0 || bits.TrailingZeros(diffL) == mirrorL ||
-			diffR == 0 || bits.TrailingZeros(diffR) == mirrorL)
-	}
-
-*
-*/
-
 func mask(l int) uint {
 	bs := ""
 	for i := 0; i < l; i++ {
@@ -47,12 +33,25 @@ func mask(l int) uint {
 }
 
 func zeroEnough(left, right uint, originalL, shift int) bool {
-	left = left & mask(originalL-shift)
-	right >>= shift
+	//left = left //& mask(originalL-shift)
+	diff := left - (right >> shift)
 
-	diff := left - right
-	slog.Debug("diff", "left", fmtBinary(left), "right", fmtBinary(right), "originalL", originalL, "shift", shift, "diff", fmtBinary(diff))
-	return diff == 0 || bits.TrailingZeros(diff) == originalL-shift
+	slog.Debug("diff",
+		"left",
+		fmtBinary(left),
+		"right",
+		fmtBinary(right>>shift),
+		"right original",
+		fmtBinary(right),
+		"originalL",
+		originalL,
+		"shift",
+		shift,
+		"diff",
+		fmtBinary(diff),
+	)
+
+	return diff == 0 || bits.TrailingZeros(diff) >= originalL-shift
 }
 
 func splitIndex(p []string) int {
@@ -108,10 +107,10 @@ func verticalLeftSplit(pattern []string) int {
 	if leftSplitIdx > 0 {
 		// shifts + half the mirror length
 		leftSplitIdx = leftSplitIdx + (len(pattern[0])-leftSplitIdx)/2
+		slog.Debug(
+			"finished computing valid vertical split",
+			"left split index", leftSplitIdx)
 	}
-	slog.Debug(
-		"finished computing valid vertical split",
-		"left split index", leftSplitIdx)
 	return leftSplitIdx
 }
 
@@ -127,10 +126,10 @@ func horizontalAboveSplit(pattern []string) int {
 	if aboveSplitIdx > 0 {
 		// shifts + half the mirror length
 		aboveSplitIdx = aboveSplitIdx + (len(pattern)-aboveSplitIdx)/2
+		slog.Debug(
+			"finished computing valid horizontal split",
+			"above split index", aboveSplitIdx)
 	}
-	slog.Debug(
-		"finished computing valid horizontal split",
-		"above split index", aboveSplitIdx)
 	return aboveSplitIdx
 }
 
@@ -142,6 +141,8 @@ func partOne(puzzleFile string) {
 	}
 
 	sc := bufio.NewScanner(f)
+	sc.Scan()
+	ans := sc.Text()
 
 	patterns := make([][]string, 1)
 	for sc.Scan() {
@@ -181,7 +182,7 @@ func partOne(puzzleFile string) {
 		)
 	}
 
-	slog.Info("Finished day thirteen part one", "summary", verticalLeftSum+horizontalAboveSum*100)
+	slog.Info("Finished day thirteen part one", "expected", ans, "summary", verticalLeftSum+horizontalAboveSum*100)
 }
 
 func partTwo(puzzleFile string) {
