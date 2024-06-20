@@ -38,7 +38,7 @@ func rmask(length, mirrorPoint int) uint32 {
 	return uint32(math.Pow(2, float64(length-mirrorPoint)) - 1)
 }
 
-func mirror(original uint32, length, mirrorPoint int) bool {
+func mirror(original uint32, length, mirrorPoint int) uint32 {
 	left := original >> (length - mirrorPoint)
 	left &= lmask(length, mirrorPoint)
 
@@ -46,7 +46,7 @@ func mirror(original uint32, length, mirrorPoint int) bool {
 	reversed >>= (32 - (length - mirrorPoint))
 	reversed &= rmask(length, mirrorPoint)
 
-	diff := left - reversed
+	diff := left ^ reversed
 
 	slog.Debug("diff",
 		"original",
@@ -63,15 +63,24 @@ func mirror(original uint32, length, mirrorPoint int) bool {
 		fmtBinary(diff),
 	)
 
-	return diff == 0 //|| bits.TrailingZeros(diff) >= originalL-mirrorPoint
+	return diff //|| bits.TrailingZeros(diff) >= originalL-mirrorPoint
 }
 
-func splitIndex(p []string) int {
-	initialShifts := make([]int, 0)
+type Shift struct {
+	S    int
+	DAcc int
+}
+
+func (s *Shift) String() string {
+	return fmt.Sprintf("[S: %d, DAcc: %d]", s.S, s.DAcc)
+}
+
+func splitIndex(p []string, allowedDifferences int) int {
+	initialShifts := make([]*Shift, 0)
 	for i := 1; i < len(p[0]); i++ {
-		initialShifts = append(initialShifts, i)
+		initialShifts = append(initialShifts, &Shift{i, 0})
 	}
-	validShifts := [][]int{initialShifts}
+	validShifts := [][]*Shift{initialShifts}
 
 	for _, r := range p {
 		previousShifts := validShifts[len(validShifts)-1]
@@ -79,18 +88,17 @@ func splitIndex(p []string) int {
 			continue
 		}
 
-		theseShifts := []int{}
-		firstShift := previousShifts[0]
+		theseShifts := []*Shift{}
 		tmp, _ := strconv.ParseInt(r, 2, 32)
 		bin := uint32(tmp)
 
-		if mirror(bin, len(r), firstShift) {
-			theseShifts = append(theseShifts, firstShift)
-		}
-
-		for _, s := range previousShifts[1:] {
-			if mirror(bin, len(r), s) {
-				theseShifts = append(theseShifts, s)
+		for _, s := range previousShifts {
+			newS := &Shift{
+				S:    s.S,
+				DAcc: s.DAcc + bits.OnesCount32(mirror(bin, len(r), s.S)),
+			}
+			if newS.DAcc <= allowedDifferences {
+				theseShifts = append(theseShifts, newS)
 			}
 		}
 		validShifts = append(validShifts, theseShifts)
@@ -102,14 +110,17 @@ func splitIndex(p []string) int {
 	)
 
 	if len(validShifts) >= len(p) && len(validShifts[len(validShifts)-1]) > 0 {
-		splitIdx := validShifts[len(validShifts)-1][0]
-		return splitIdx
+		for _, s := range validShifts[len(validShifts)-1] {
+			if s.DAcc == allowedDifferences {
+				return s.S
+			}
+		}
 	}
 	return 0
 }
 
-func verticalLeftSplit(pattern []string) int {
-	leftSplitIdx := splitIndex(pattern)
+func verticalLeftSplit(pattern []string, allowedDifferences int) int {
+	leftSplitIdx := splitIndex(pattern, allowedDifferences)
 	if leftSplitIdx > 0 {
 		slog.Debug(
 			"finished computing valid vertical split",
@@ -118,7 +129,7 @@ func verticalLeftSplit(pattern []string) int {
 	return leftSplitIdx
 }
 
-func horizontalAboveSplit(pattern []string) int {
+func horizontalAboveSplit(pattern []string, allowedDifferences int) int {
 	rotatedPattern := make([]string, len(pattern[0]))
 	for i := 0; i < len(pattern[0]); i++ {
 		for j := 0; j < len(pattern); j++ {
@@ -126,7 +137,7 @@ func horizontalAboveSplit(pattern []string) int {
 		}
 	}
 	slog.Debug("rotated pattern", "p", rotatedPattern)
-	aboveSplitIdx := splitIndex(rotatedPattern)
+	aboveSplitIdx := splitIndex(rotatedPattern, allowedDifferences)
 	if aboveSplitIdx > 0 {
 		slog.Debug(
 			"finished computing valid horizontal split",
@@ -169,11 +180,11 @@ func partOne(puzzleFile string) {
 
 	for i, p := range patterns {
 		// try vertical
-		l := verticalLeftSplit(p)
+		l := verticalLeftSplit(p, 0)
 		verticalLeftSum += l
 
 		// try horizontal
-		h := horizontalAboveSplit(p)
+		h := horizontalAboveSplit(p, 0)
 		horizontalAboveSum += h
 
 		slog.Debug(
@@ -189,6 +200,54 @@ func partOne(puzzleFile string) {
 
 func partTwo(puzzleFile string) {
 	slog.Info("Day Thirteen part two", "puzzle file", puzzleFile)
+	f, err := os.Open(puzzleFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sc := bufio.NewScanner(f)
+	sc.Scan()
+	ans := sc.Text()
+
+	patterns := make([][]string, 1)
+	for sc.Scan() {
+		row := ""
+		t := sc.Text()
+		if t == "" {
+			patterns = append(patterns, []string{})
+			continue
+		}
+		for _, c := range t {
+			if c == '#' {
+				row += "1"
+			} else {
+				row += "0"
+			}
+		}
+		patterns[len(patterns)-1] = append(patterns[len(patterns)-1], row)
+	}
+
+	verticalLeftSum := 0
+	horizontalAboveSum := 0
+
+	for i, p := range patterns {
+		// try vertical
+		l := verticalLeftSplit(p, 1)
+		verticalLeftSum += l
+
+		// try horizontal
+		h := horizontalAboveSplit(p, 1)
+		horizontalAboveSum += h
+
+		slog.Debug(
+			"finished computing split",
+			"pattern", i,
+			"vert", l,
+			"horizontal", h,
+		)
+	}
+
+	slog.Info("Finished day thirteen part two", "expected", ans, "value", verticalLeftSum+horizontalAboveSum*100)
 }
 
 var Cmd = &cobra.Command{
