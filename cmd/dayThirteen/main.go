@@ -2,8 +2,10 @@ package dayThirteen
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"math/bits"
 	"os"
 	"strconv"
@@ -18,45 +20,58 @@ import (
  one shift plus half (4) means five is shift point
 **/
 
-func fmtBinary(b uint) string {
-	return strconv.FormatUint(uint64(b), 2)
+func fmtBinary(b uint16) string {
+	return fmt.Sprintf("%016b", b)
 }
 
-func mask(l int) uint {
-	bs := ""
-	for i := 0; i < l; i++ {
-		bs = bs + "1"
+func lmask(length, mirrorPoint int) uint16 {
+	if mirrorPoint > length/2 {
+		return uint16(math.Pow(2, float64(length-mirrorPoint)) - 1)
 	}
-
-	r, _ := strconv.ParseInt(bs, 2, 10)
-	return uint(r)
+	return uint16(math.Pow(2, 16) - 1)
 }
 
-func zeroEnough(left, right uint, originalL, shift int) bool {
-	//left = left //& mask(originalL-shift)
-	diff := left - (right >> shift)
+func rmask(length, mirrorPoint int) uint16 {
+	if mirrorPoint <= length/2 {
+		return uint16(math.Pow(2, float64(mirrorPoint)) - 1)
+	}
+	return uint16(math.Pow(2, float64(length-mirrorPoint)) - 1)
+}
+
+func mirror(original uint16, length, mirrorPoint int) bool {
+	left := original >> (length - mirrorPoint)
+	left &= lmask(length, mirrorPoint)
+
+	reversed := bits.Reverse16(original)
+	fmt.Println(fmtBinary(reversed))
+	reversed >>= (16 - (length - mirrorPoint))
+	fmt.Println(fmtBinary(reversed))
+	reversed &= rmask(length, mirrorPoint)
+	fmt.Println(fmtBinary(reversed))
+
+	diff := left - reversed
 
 	slog.Debug("diff",
+		"original",
+		fmtBinary(original),
 		"left",
 		fmtBinary(left),
-		"right",
-		fmtBinary(right>>shift),
-		"right original",
-		fmtBinary(right),
+		"reversed",
+		fmtBinary(reversed),
 		"originalL",
-		originalL,
-		"shift",
-		shift,
+		length,
+		"mirrorPoint",
+		mirrorPoint,
 		"diff",
 		fmtBinary(diff),
 	)
 
-	return diff == 0 || bits.TrailingZeros(diff) >= originalL-shift
+	return diff == 0 //|| bits.TrailingZeros(diff) >= originalL-mirrorPoint
 }
 
 func splitIndex(p []string) int {
 	initialShifts := make([]int, 0)
-	for i := 0; i < len(p[0]); i++ {
+	for i := len(p[0]) / 2; i < len(p[0]); i++ {
 		initialShifts = append(initialShifts, i)
 	}
 	validShifts := [][]int{initialShifts}
@@ -70,20 +85,14 @@ func splitIndex(p []string) int {
 		theseShifts := []int{}
 		firstShift := previousShifts[0]
 		tmp, _ := strconv.ParseInt(r, 2, 10)
-		bin := uint(tmp)
-		tmpR := make([]rune, len(r))
-		for i, c := range r {
-			tmpR[len(tmpR)-i-1] = c
-		}
-		tmp, _ = strconv.ParseInt(string(tmpR), 2, 10)
-		binR := uint(tmp)
+		bin := uint16(tmp)
 
-		if zeroEnough(bin, binR, len(r), firstShift) {
+		if mirror(bin, len(r), firstShift) {
 			theseShifts = append(theseShifts, firstShift)
 		}
 
 		for _, s := range previousShifts[1:] {
-			if zeroEnough(bin, binR, len(r), s) {
+			if mirror(bin, len(r), s) {
 				theseShifts = append(theseShifts, s)
 			}
 		}
@@ -105,8 +114,6 @@ func splitIndex(p []string) int {
 func verticalLeftSplit(pattern []string) int {
 	leftSplitIdx := splitIndex(pattern)
 	if leftSplitIdx > 0 {
-		// shifts + half the mirror length
-		leftSplitIdx = leftSplitIdx + (len(pattern[0])-leftSplitIdx)/2
 		slog.Debug(
 			"finished computing valid vertical split",
 			"left split index", leftSplitIdx)
@@ -124,8 +131,6 @@ func horizontalAboveSplit(pattern []string) int {
 	slog.Debug("rotated pattern", "p", rotatedPattern)
 	aboveSplitIdx := splitIndex(rotatedPattern)
 	if aboveSplitIdx > 0 {
-		// shifts + half the mirror length
-		aboveSplitIdx = aboveSplitIdx + (len(pattern)-aboveSplitIdx)/2
 		slog.Debug(
 			"finished computing valid horizontal split",
 			"above split index", aboveSplitIdx)
