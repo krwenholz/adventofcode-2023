@@ -17,29 +17,15 @@ import (
 **/
 
 func load(rows []string) int {
-	colEnds := map[int]int{} // map the last row index for each column
-	for i := range rows[0] {
-		colEnds[i] = len(rows)
-	}
-
 	//colRoundRocks := make(map[int][]int, len(rows[0]))
 	loadTotal := 0
 
 	// for every row we're either updating a column end, not, or adding a new rounded rock
 	for i, row := range rows {
-		for col, rock := range row {
-			switch rock {
-			case '.':
-				// nothing for an empty spot!
-			case '#':
-				// update the end of the column!
-				colEnds[col] = len(rows) - i - 1
-			case 'O':
+		for _, rock := range row {
+			if rock == 'O' {
 				// roll a rounded rock, calculate the load, and move that column end!
-				loadTotal += colEnds[col]
-				colEnds[col] = colEnds[col] - 1
-			default:
-				panic("unexpected rock type, WTF")
+				loadTotal += len(rows) - i
 			}
 		}
 	}
@@ -51,15 +37,15 @@ func partOne(puzzleFile string) {
 	slog.Info("Day Fourteen part one", "puzzle file", puzzleFile)
 
 	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+	g := toGrid(rows)
+	for i := range rows[0] {
+		g = tiltNorth(i, g)
+	}
 
 	slog.Info("Day fourteen part one total load", "load", load(rows))
 }
 
-func replace(row string, col int, char byte) string {
-	return row[:col] + string(char) + row[col+1:]
-}
-
-func tiltNorth(col int, rows []string) []string {
+func tiltNorth(col int, rows [][]rune) [][]rune {
 	stopRow := 0
 	for rowI := range rows {
 		row := rows[rowI]
@@ -71,15 +57,15 @@ func tiltNorth(col int, rows []string) []string {
 			stopRow = rowI + 1
 		case 'O':
 			// roll!
-			rows[rowI] = replace(row, col, '.')
-			rows[stopRow] = replace(rows[stopRow], col, 'O')
+			rows[rowI][col] = '.'
+			rows[stopRow][col] = 'O'
 			stopRow = stopRow + 1
 		}
 	}
 	return rows
 }
 
-func tiltSouth(col int, rows []string) []string {
+func tiltSouth(col int, rows [][]rune) [][]rune {
 	stopRow := len(rows) - 1
 	for rowI := len(rows) - 1; rowI >= 0; rowI-- {
 		row := rows[rowI]
@@ -91,8 +77,8 @@ func tiltSouth(col int, rows []string) []string {
 			stopRow = rowI - 1
 		case 'O':
 			// roll!
-			rows[rowI] = replace(row, col, '.')
-			rows[stopRow] = replace(rows[stopRow], col, 'O')
+			rows[rowI][col] = '.'
+			rows[stopRow][col] = 'O'
 			stopRow = stopRow - 1
 		}
 	}
@@ -100,7 +86,7 @@ func tiltSouth(col int, rows []string) []string {
 	return rows
 }
 
-func tiltWest(row int, rows []string) []string {
+func tiltWest(row int, rows [][]rune) [][]rune {
 	stopCol := 0
 	for col := range rows[0] {
 		switch rows[row][col] {
@@ -111,15 +97,15 @@ func tiltWest(row int, rows []string) []string {
 			stopCol = col + 1
 		case 'O':
 			// roll!
-			rows[row] = replace(rows[row], col, '.')
-			rows[row] = replace(rows[row], stopCol, 'O')
+			rows[row][col] = '.'
+			rows[row][stopCol] = 'O'
 			stopCol = stopCol + 1
 		}
 	}
 	return rows
 }
 
-func tiltEast(row int, rows []string) []string {
+func tiltEast(row int, rows [][]rune) [][]rune {
 	stopCol := len(rows[0]) - 1
 	for col := len(rows[0]) - 1; col >= 0; col-- {
 		switch rows[row][col] {
@@ -130,44 +116,75 @@ func tiltEast(row int, rows []string) []string {
 			stopCol = col - 1
 		case 'O':
 			// roll!
-			rows[row] = replace(rows[row], col, '.')
-			rows[row] = replace(rows[row], stopCol, 'O')
+			rows[row][col] = '.'
+			rows[row][stopCol] = 'O'
 			stopCol = stopCol - 1
 		}
 	}
 	return rows
 }
 
-func spinCycle(rows []string) []string {
+func printGrid(dir string, rows [][]rune) {
+	fmt.Println("grid after", dir)
+	for _, row := range rows {
+		fmt.Println(string(row))
+	}
+}
+
+func spinCycle(rows [][]rune) [][]rune {
 	for i := range rows[0] {
 		rows = tiltNorth(i, rows)
 	}
 	if os.Getenv("LOG_TILTS") == "YES" {
-		fmt.Print("tilted North\n", strings.Join(rows, "\n"), "\n")
+		printGrid("North", rows)
 	}
 	for i := range rows {
 		rows = tiltWest(i, rows)
 	}
 	if os.Getenv("LOG_TILTS") == "YES" {
-		fmt.Print("tilted West\n", strings.Join(rows, "\n"), "\n")
+		printGrid("West", rows)
 	}
 	for i := range rows[0] {
 		rows = tiltSouth(i, rows)
 	}
 	if os.Getenv("LOG_TILTS") == "YES" {
-		fmt.Print("tilted South\n", strings.Join(rows, "\n"), "\n")
+		printGrid("South", rows)
 	}
 	for i := range rows {
 		rows = tiltEast(i, rows)
 	}
 	if os.Getenv("LOG_TILTS") == "YES" {
-		fmt.Print("tilted East\n", strings.Join(rows, "\n"), "\n")
+		printGrid("East", rows)
 	}
 
 	if os.Getenv("LOG_CYCLES") == "YES" {
-		fmt.Print("cycle\n", strings.Join(rows, "\n"), "\n")
+		printGrid("Cycle", rows)
 	}
 
+	return rows
+}
+
+func gridChecksum(rows [][]rune) string {
+	checksum := ""
+	for _, row := range rows {
+		checksum += string(row)
+	}
+	return checksum
+}
+
+func toGrid(rows []string) [][]rune {
+	grid := make([][]rune, len(rows))
+	for i, row := range rows {
+		grid[i] = []rune(row)
+	}
+	return grid
+}
+
+func toRows(grid [][]rune) []string {
+	rows := make([]string, len(grid))
+	for i, row := range grid {
+		rows[i] = string(row)
+	}
 	return rows
 }
 
@@ -175,11 +192,25 @@ func partTwo(puzzleFile string, cycles int) {
 	slog.Info("Day Fourteen part two", "puzzle file", puzzleFile)
 
 	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+	g := toGrid(rows)
+
+	seenGrids := map[string]int{}
+
 	for i := 0; i < cycles; i++ {
-		spinCycle(rows)
+		g = spinCycle(g)
+		if seen, ok := seenGrids[gridChecksum(g)]; ok {
+			slog.Debug("Day fourteen part two repeat found", "cycle", i, "seen", seen)
+			maxSkips := (cycles - i) / (i - seen)
+			i = i + maxSkips*(i-seen)
+			slog.Debug("skipping", "new cycle", i, "maxSkips", maxSkips)
+			continue
+		}
+		seenGrids[gridChecksum(g)] = i
+		slog.Debug("Day fourteen part two cycle", "cycle", i, "load", load(toRows(g)))
 	}
 
-	slog.Info("Day fourteen part two total load", "load", load(rows))
+	printGrid("Final", g)
+	slog.Info("Day fourteen part two total load", "load", load(toRows(g)))
 }
 
 var Cmd = &cobra.Command{

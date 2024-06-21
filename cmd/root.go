@@ -3,6 +3,7 @@ package cmd
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lmittmann/tint"
@@ -36,7 +37,7 @@ func init() {
 
 	// Logging configuration
 	var logLevel slog.Level
-	switch os.Getenv("LOG_LEVEL") {
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "debug":
 		logLevel = slog.LevelDebug
 	default:
