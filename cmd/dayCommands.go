@@ -11,6 +11,7 @@ import (
 	"adventofcode/cmd/dayNine"
 	"adventofcode/cmd/daySeven"
 	"adventofcode/cmd/daySix"
+	"adventofcode/cmd/daySixteen"
 	"adventofcode/cmd/dayTen"
 	"adventofcode/cmd/dayThirteen"
 	"adventofcode/cmd/dayThree"
@@ -32,6 +33,7 @@ func init() {
 		dayNine.Cmd,
 		daySeven.Cmd,
 		daySix.Cmd,
+		daySixteen.Cmd,
 		dayTen.Cmd,
 		dayThirteen.Cmd,
 		dayThree.Cmd,
