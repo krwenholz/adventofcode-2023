@@ -202,7 +202,7 @@ func (b *Beam) StepBeam(rows []string) []*Beam {
 		panic(fmt.Sprintf("WTF! Unknown character %s", string(rows[b.y][b.x])))
 	}
 
-	slog.Debug("next beams", "nextBeams", nextBeams)
+	//slog.Debug("next beams", "nextBeams", nextBeams)
 	filteredBeams := []*Beam{}
 	for _, nextBeam := range nextBeams {
 		if nextBeam.inBounds(rows) {
@@ -234,17 +234,14 @@ func PrintTouches(rows []string, touchedSpaces map[string]bool) {
 	}
 }
 
-func partOne(puzzleFile string, maxIterations int) {
-	slog.Info("Day Sixteen part one", "puzzle file", puzzleFile)
-	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
-
+func calculateEnergy(rows []string, startBeam *Beam, maxIterations int) int {
 	touchedSpaces := map[string]bool{}
-	beams := []*Beam{{0, 0, 0, 1, 0}}
+	beams := []*Beam{startBeam}
 	seenBeams := map[string]bool{}
 
 	steps := 0
 	for len(beams) > 0 {
-		slog.Debug("running beams", "beams", beams)
+		//slog.Debug("running beams", "beams", beams)
 		nextBeams := []*Beam{}
 
 		for _, beam := range beams {
@@ -267,12 +264,49 @@ func partOne(puzzleFile string, maxIterations int) {
 		steps++
 	}
 
-	PrintTouches(rows, touchedSpaces)
-	slog.Info("Day Sixteen part one", "touched spaces", touchedSpaces, "steps", steps, "energized spaces", len(touchedSpaces))
+	//PrintTouches(rows, touchedSpaces)
+	slog.Debug("calculated energy", "touched spaces", touchedSpaces, "steps", steps, "energized spaces", len(touchedSpaces))
+	return len(touchedSpaces)
 }
 
-func partTwo(puzzleFile string) {
+func partOne(puzzleFile string, maxIterations int) {
+	slog.Info("Day Sixteen part one", "puzzle file", puzzleFile)
+	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+
+	energizedSpaces := calculateEnergy(rows, &Beam{0, 0, 0, 1, 0}, maxIterations)
+
+	slog.Info("Day Sixteen part one", "energized spaces", energizedSpaces)
+}
+
+func partTwo(puzzleFile string, maxIterations int) {
 	slog.Info("Day Sixteen part two", "puzzle file", puzzleFile)
+	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+
+	validStarts := []*Beam{}
+	for x := 0; x < len(rows[0]); x++ {
+		// top
+		validStarts = append(validStarts, &Beam{0, x, 0, 0, 1})
+		// bottom
+		validStarts = append(validStarts, &Beam{0, x, len(rows) - 1, 0, -1})
+	}
+	for y := 0; y < len(rows); y++ {
+		// left
+		validStarts = append(validStarts, &Beam{0, 0, y, 1, 0})
+		// right
+		validStarts = append(validStarts, &Beam{0, len(rows[0]) - 1, y, -1, 0})
+	}
+	slog.Debug("all starts", "validStarts", validStarts)
+
+	max := 0
+	for _, start := range validStarts {
+		energizedSpaces := calculateEnergy(rows, start, maxIterations)
+		if energizedSpaces > max {
+			max = energizedSpaces
+		}
+	}
+
+	// need to generate all valid starts and then iterate
+	slog.Info("Day Sixteen part two", "max energized spaces", max)
 }
 
 var Cmd = &cobra.Command{
@@ -283,7 +317,7 @@ var Cmd = &cobra.Command{
 		if !cmd.Flag("part-two").Changed {
 			partOne(puzzleInput, maxIterations)
 		} else {
-			partTwo(puzzleInput)
+			partTwo(puzzleInput, maxIterations)
 		}
 	},
 }
