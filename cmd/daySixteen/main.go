@@ -38,6 +38,10 @@ func (b *Beam) String() string {
 	return fmt.Sprintf("%d: %s %s", b.id, b.LocationString(), b.DirectionString())
 }
 
+func (b *Beam) Hash() string {
+	return fmt.Sprintf("%s %s", b.LocationString(), b.DirectionString())
+}
+
 func (b *Beam) LocationString() string {
 	return fmt.Sprintf("%d,%d", b.x, b.y)
 }
@@ -46,9 +50,9 @@ func (b *Beam) DirectionString() string {
 	switch b.deltaX {
 	case 0:
 		if b.deltaY > 0 {
-			return "^"
-		} else {
 			return "v"
+		} else {
+			return "^"
 		}
 	case -1:
 		return "<"
@@ -237,7 +241,7 @@ func PrintTouches(rows []string, touchedSpaces map[string]bool) {
 func calculateEnergy(rows []string, startBeam *Beam, maxIterations int) int {
 	touchedSpaces := map[string]bool{}
 	beams := []*Beam{startBeam}
-	seenBeams := map[string]bool{}
+	seenBeams := map[string]bool{} // ???: should I memoize this across runs?
 
 	steps := 0
 	for len(beams) > 0 {
@@ -248,24 +252,24 @@ func calculateEnergy(rows []string, startBeam *Beam, maxIterations int) int {
 			touchedSpaces[beam.LocationString()] = true
 			news := beam.StepBeam(rows)
 			for _, newBeam := range news {
-				if _, ok := seenBeams[newBeam.String()]; ok {
+				if _, ok := seenBeams[newBeam.Hash()]; ok {
 					continue
 				}
-				seenBeams[newBeam.String()] = true
+				seenBeams[newBeam.Hash()] = true
 				nextBeams = append(nextBeams, newBeam)
 			}
 		}
 
 		beams = nextBeams
 		if steps > maxIterations {
-			slog.Debug("breaking because max iterations", "steps", steps, "maxIterations", maxIterations)
+			slog.Debug("breaking because max iterations", "start", startBeam, "steps", steps, "maxIterations", maxIterations)
 			break
 		}
 		steps++
 	}
 
 	//PrintTouches(rows, touchedSpaces)
-	slog.Debug("calculated energy", "touched spaces", touchedSpaces, "steps", steps, "energized spaces", len(touchedSpaces))
+	slog.Debug("calculated energy", "start", startBeam, "touched spaces", touchedSpaces, "steps", steps, "energized spaces", len(touchedSpaces))
 	return len(touchedSpaces)
 }
 
@@ -295,6 +299,7 @@ func partTwo(puzzleFile string, maxIterations int) {
 		// right
 		validStarts = append(validStarts, &Beam{0, len(rows[0]) - 1, y, -1, 0})
 	}
+	//validStarts = []*Beam{{0, 0, 8, 1, 0}}
 	slog.Debug("all starts", "validStarts", validStarts)
 
 	max := 0
