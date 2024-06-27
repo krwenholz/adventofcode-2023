@@ -20,7 +20,7 @@ type Coordinate struct {
 }
 
 func (c *Coordinate) String() string {
-	return fmt.Sprintf("(%d, %d)", c.Row, c.Col)
+	return fmt.Sprintf("(%d,%d)", c.Row, c.Col)
 }
 
 type Cell struct {
@@ -47,7 +47,7 @@ func (c *Cell) SetH(h float64) {
 
 func (c *Cell) Next(row, col int) *Cell {
 	newParents := append(c.prevParents, c.parent)
-	if len(newParents) > 3 {
+	if len(newParents) > 5 {
 		newParents = newParents[1:]
 	}
 	return &Cell{&Coordinate{row, col}, 0, 0, 0, newParents}
@@ -68,7 +68,7 @@ func (c *Cell) IsValid(rows []string) bool {
 			countCol[parent.Col] = 1
 		}
 	}
-	if len(c.prevParents) == 3 && (len(countRow) == 1 || len(countCol) == 1) {
+	if len(c.prevParents) == 5 && (len(countRow) == 1 || len(countCol) == 1) {
 		return false
 	}
 	return c.parent.Row >= 0 && c.parent.Row < len(rows) && c.parent.Col >= 0 && c.parent.Col < len(rows[0])
@@ -78,9 +78,10 @@ func IsDestination(row, col int, dest []int) bool {
 	return row == dest[0] && col == dest[1]
 }
 
-// Calculate the heuristic value of a cell: Manhattan distance
 func HValue(row, col int, dest []int) float64 {
+	// Calculate the heuristic value of a cell: Manhattan distance
 	return float64((dest[0] - row) + (dest[1] - col))
+	//return 0 // djikstra
 	//return math.Pow((math.Pow(float64(row-dest[0]), 2) + math.Pow(float64(col-dest[1]), 2)), 0.5)
 }
 
@@ -120,13 +121,14 @@ func directions() [][]int {
 	}
 }
 
+func (c *Cell) CellState() string {
+	return fmt.Sprintf("(%d,%d) %v", c.parent.Row, c.parent.Col, c.prevParents)
+}
+
 // An A* implementation!
-func AStarSearch(grid []string, src, dest []int) [][]int {
+func AStarSearch(grid []string, src, dest []int) ([][]int, [][]*Cell) {
 	// Initialize the closed list (visited cells)
-	closedList := make([][]bool, len(grid))
-	for i := 0; i < len(grid); i++ {
-		closedList[i] = make([]bool, len(grid[0]))
-	}
+	closedList := map[string]bool{}
 
 	// Initialize the details of each cell
 	cellDetails := make([][]*Cell, len(grid))
@@ -157,42 +159,49 @@ func AStarSearch(grid []string, src, dest []int) [][]int {
 		p := heap.Pop(openList).(*Cell)
 		row := p.parent.Row
 		col := p.parent.Col
-		closedList[row][col] = true
+		closedList[p.CellState()] = true
 
 		slog.Debug("popped!", "cell", p, "open list len", len(*openList))
 		// For each direction, check the successors
 		for _, dir := range directions() {
 			newRow := row + dir[0]
 			newCol := col + dir[1]
-
-			// If the successor is valid and not visited
 			newCell := p.Next(newRow, newCol)
-			if newCell.IsValid(grid) && !closedList[newRow][newCol] {
-				// If the successor is the destination
-				if IsDestination(newRow, newCol, dest) {
-					// Set the parent of the destination cell
-					cellDetails[newRow][newCol].parent.Row = row
-					cellDetails[newRow][newCol].parent.Col = col
-					slog.Info("The destination cell is found")
-					// Trace and print the path from source to destination
-					return TracePath(cellDetails, dest)
-				} else {
-					// Calculate the new f, g, and h values
-					newCell.SetG(cellDetails[row][col].g + HeatLoss(newRow, newCol, grid))
-					newCell.SetH(HValue(newRow, newCol, dest))
 
-					// If the cell is not in the open list or the new f value is smaller
-					if cellDetails[newRow][newCol].f == float64(math.Inf(1)) || cellDetails[newRow][newCol].f > newCell.f {
-						// Add the cell to the open list
-						slog.Debug("pushing!", "cell", newCell, "open list", len(*openList))
-						heap.Push(openList, newCell)
-						// Update the cell details
-						cellDetails[newRow][newCol].SetG(newCell.g)
-						cellDetails[newRow][newCol].SetH(newCell.h)
-						cellDetails[newRow][newCol].parent.Row = row
-						cellDetails[newRow][newCol].parent.Col = col
-					}
-				}
+			// avoid invalid states
+			if !newCell.IsValid(grid) {
+				continue
+			}
+			// avoid closed states
+			if closedList[newCell.CellState()] {
+				continue
+			}
+
+			// We can be done!
+			if IsDestination(newRow, newCol, dest) {
+				// Set the parent of the destination cell
+				cellDetails[newRow][newCol].parent.Row = row
+				cellDetails[newRow][newCol].parent.Col = col
+				cellDetails[newRow][newCol].SetG(p.g + HeatLoss(newRow, newCol, grid))
+				slog.Info("The destination cell is found")
+				// Trace and print the path from source to destination
+				return TracePath(cellDetails, dest), cellDetails
+			}
+
+			// Calculate the new f, g, and h values
+			newCell.SetG(cellDetails[row][col].g + HeatLoss(newRow, newCol, grid))
+			newCell.SetH(HValue(newRow, newCol, dest))
+
+			// If the cell is not in the open list or the new f value is smaller
+			if cellDetails[newRow][newCol].f == float64(math.Inf(1)) || cellDetails[newRow][newCol].f > newCell.f {
+				// Add the cell to the open list
+				slog.Debug("pushing!", "cell", newCell, "open list", len(*openList))
+				heap.Push(openList, newCell)
+				// Update the cell details
+				cellDetails[newRow][newCol].SetG(newCell.g)
+				cellDetails[newRow][newCol].SetH(newCell.h)
+				cellDetails[newRow][newCol].parent.Row = row
+				cellDetails[newRow][newCol].parent.Col = col
 			}
 		}
 	}
@@ -214,6 +223,18 @@ func PrintPath(path [][]int, grid []string) {
 	}
 }
 
+func PrintCellDetails(cellDetails [][]*Cell) {
+	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
+		return
+	}
+	for _, row := range cellDetails {
+		for _, cell := range row {
+			fmt.Printf("%03d ", int(cell.g))
+		}
+		fmt.Print("\n")
+	}
+}
+
 func partOne(puzzleFile string) {
 	slog.Info("Day Seventeen part one", "puzzle file", puzzleFile)
 	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
@@ -221,16 +242,12 @@ func partOne(puzzleFile string) {
 	src := []int{0, 0}
 	dest := []int{len(rows) - 1, len(rows[0]) - 1}
 
-	path := AStarSearch(rows, src, dest)
-	heatLoss := 0
-	for _, coord := range path {
-		// TODO(kyle): need to account for the actual values
-		heatLoss += int(HeatLoss(coord[0], coord[1], rows))
-	}
+	path, cellDetails := AStarSearch(rows, src, dest)
 
 	PrintPath(path, rows)
+	PrintCellDetails(cellDetails)
 
-	slog.Info("The path from source to destination found", "path", path, "heat loss", heatLoss)
+	slog.Info("The path from source to destination found", "path", path, "heat loss", cellDetails[dest[0]][dest[1]].g)
 }
 
 func partTwo(puzzleFile string) {
