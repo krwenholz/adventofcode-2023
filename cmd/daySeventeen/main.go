@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,6 +35,16 @@ func (c *Cell) String() string {
 	return fmt.Sprintf("Cell{%s, f: %f, g: %f, h: %f, prevParents: %v}", c.parent.String(), c.f, c.g, c.h, c.prevParents)
 }
 
+func (c *Cell) SetG(g float64) {
+	c.g = g
+	c.f = c.g + c.h
+}
+
+func (c *Cell) SetH(h float64) {
+	c.h = h
+	c.f = c.g + c.h
+}
+
 func (c *Cell) Next(row, col int) *Cell {
 	newParents := append(c.prevParents, c.parent)
 	if len(newParents) > 3 {
@@ -42,14 +53,10 @@ func (c *Cell) Next(row, col int) *Cell {
 	return &Cell{&Coordinate{row, col}, 0, 0, 0, newParents}
 }
 
-func (c *Cell) F() float64 {
-	return c.g + c.h
-}
-
 func (c *Cell) IsValid(rows []string) bool {
 	countRow := map[int]int{}
 	countCol := map[int]int{}
-	for _, parent := range c.prevParents[1:] {
+	for _, parent := range c.prevParents {
 		if _, ok := countRow[parent.Row]; ok {
 			countRow[parent.Row]++
 		} else {
@@ -89,7 +96,6 @@ func TracePath(cellDetails [][]*Cell, dest []int) [][]int {
 		tempCol := cellDetails[row][col].parent.Col
 		row = tempRow
 		col = tempCol
-		slog.Debug("tracing path", "row", row, "col", col)
 	}
 
 	// Add the source cell to the path
@@ -144,15 +150,16 @@ func AStarSearch(grid []string, src, dest []int) [][]int {
 	cellDetails[row][col] = start
 
 	// Initialize the open list (cells to be visited) with the start cell
-	openList := CellHeap{start}
+	openList := &CellHeap{start}
 
 	// Main loop of A* search algorithm
-	for len(openList) > 0 {
-		p := heap.Pop(&openList).(*Cell)
+	for len(*openList) > 0 {
+		p := heap.Pop(openList).(*Cell)
 		row := p.parent.Row
 		col := p.parent.Col
 		closedList[row][col] = true
 
+		slog.Debug("popped!", "cell", p, "open list len", len(*openList))
 		// For each direction, check the successors
 		for _, dir := range directions() {
 			newRow := row + dir[0]
@@ -171,18 +178,17 @@ func AStarSearch(grid []string, src, dest []int) [][]int {
 					return TracePath(cellDetails, dest)
 				} else {
 					// Calculate the new f, g, and h values
-					newCell.g = cellDetails[row][col].g + HeatLoss(newRow, newCol, grid)
-					newCell.h = HValue(newRow, newCol, dest)
-					slog.Debug("Checking successor", "parent", p, "cell", newCell, "direction", dir)
+					newCell.SetG(cellDetails[row][col].g + HeatLoss(newRow, newCol, grid))
+					newCell.SetH(HValue(newRow, newCol, dest))
 
 					// If the cell is not in the open list or the new f value is smaller
-					if cellDetails[newRow][newCol].f == float64(math.Inf(1)) || cellDetails[newRow][newCol].f > newCell.F() {
+					if cellDetails[newRow][newCol].f == float64(math.Inf(1)) || cellDetails[newRow][newCol].f > newCell.f {
 						// Add the cell to the open list
-						heap.Push(&openList, newCell)
+						slog.Debug("pushing!", "cell", newCell, "open list", len(*openList))
+						heap.Push(openList, newCell)
 						// Update the cell details
-						cellDetails[newRow][newCol].f = newCell.F()
-						cellDetails[newRow][newCol].g = newCell.g
-						cellDetails[newRow][newCol].h = newCell.h
+						cellDetails[newRow][newCol].SetG(newCell.g)
+						cellDetails[newRow][newCol].SetH(newCell.h)
 						cellDetails[newRow][newCol].parent.Row = row
 						cellDetails[newRow][newCol].parent.Col = col
 					}
@@ -192,6 +198,20 @@ func AStarSearch(grid []string, src, dest []int) [][]int {
 	}
 
 	panic("Did not find the destination cell")
+}
+
+func PrintPath(path [][]int, grid []string) {
+	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
+		return
+	}
+	for _, coord := range path {
+		row := coord[0]
+		col := coord[1]
+		grid[row] = grid[row][:col] + "X" + grid[row][col+1:]
+	}
+	for _, row := range grid {
+		fmt.Println(row)
+	}
 }
 
 func partOne(puzzleFile string) {
@@ -207,6 +227,8 @@ func partOne(puzzleFile string) {
 		// TODO(kyle): need to account for the actual values
 		heatLoss += int(HeatLoss(coord[0], coord[1], rows))
 	}
+
+	PrintPath(path, rows)
 
 	slog.Info("The path from source to destination found", "path", path, "heat loss", heatLoss)
 }

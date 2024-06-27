@@ -10,7 +10,7 @@ func (h CellHeap) Len() int {
 
 // Less compares two cells based on their f values
 func (h CellHeap) Less(i, j int) bool {
-	return h[i].F() < h[j].F()
+	return h[i].f < h[j].f
 }
 
 // Swap swaps two cells in the heap
