@@ -53,6 +53,19 @@ func (d *Direction) Equals(other *Direction) bool {
 	return d.Row == other.Row && d.Col == other.Col
 }
 
+func (d *Direction) IsPerpendicular(other *Direction) bool {
+	if (d.Row == 0 && d.Col == 1) || (d.Row == 0 && d.Col == -1) {
+		if (other.Row == 1 && other.Col == 0) || (other.Row == -1 && other.Col == 0) {
+			return true
+		}
+	} else if (d.Row == 1 && d.Col == 0) || (d.Row == -1 && d.Col == 0) {
+		if (other.Row == 0 && other.Col == 1) || (other.Row == 0 && other.Col == -1) {
+			return true
+		}
+	}
+	return false
+}
+
 type Cell struct {
 	coords *Coordinate
 	dir    *Direction
@@ -67,12 +80,15 @@ func (c *Cell) String() string {
 }
 
 func (c *Cell) Next(dir *Direction, dest *Coordinate, grid []string) (*Cell, error) {
-	steps := c.steps + 1
-	if c.dir != nil && !c.dir.Equals(dir) {
-		steps = 1
+	var steps int
+	if c.dir != nil && c.steps == 3 && !c.dir.IsPerpendicular(dir) {
+		return nil, fmt.Errorf("too many steps in the same direction without a 90 degree turn")
 	}
-	if steps > 3 {
-		return nil, fmt.Errorf("too many steps in the same direction")
+
+	if c.dir != nil && c.dir.Equals(dir) {
+		steps = c.steps + 1
+	} else {
+		steps = 1
 	}
 
 	newCell := &Cell{
@@ -100,11 +116,9 @@ func (c *Cell) CellState() string {
 }
 
 func ReconstructPath(cameFrom map[string]*Cell, current *Cell) [][]int {
-	slog.Debug("Reconstructing path", "cameFrom", cameFrom, "current", current)
 	totalPath := [][]int{{current.coords.Row, current.coords.Col}}
 	for {
 		if prev, ok := cameFrom[current.CellState()]; ok {
-			slog.Debug("Reconstructing path", "current", current.CellState(), "prev", prev.CellState())
 			totalPath = append(totalPath, []int{current.coords.Row, current.coords.Col})
 			current = prev
 		} else {
@@ -157,11 +171,11 @@ func AStarSearch(grid []string, src, dest *Coordinate) ([][]int, [][]int) {
 	for len(*openSet) > 0 {
 		current := heap.Pop(openSet).(*Cell)
 
+		slog.Debug("popped!", "cell", current, "open list len", len(*openSet))
+
 		if current.coords.Equals(dest) {
 			return ReconstructPath(cameFrom, current), gScore
 		}
-
-		slog.Debug("popped!", "cell", current, "open list len", len(*openSet))
 		// For each direction, check the successors
 		for _, dir := range directions() {
 			// Cell{(0,11), f: 58, g: 45, h: 13, parents: [(0,10) (1,10) (2,10) (2,11) (0,12)]
