@@ -79,7 +79,7 @@ func (c *Cell) String() string {
 	return fmt.Sprintf("Cell{%s, dir: %s, steps: %d, f: %d, g: %d, h: %d}", c.coords.String(), c.dir, c.steps, c.f, c.g, c.h)
 }
 
-func (c *Cell) Next(dir *Direction, dest *Coordinate, grid []string) (*Cell, error) {
+func (c *Cell) Next(dir *Direction, dest *Coordinate, grid [][]int) (*Cell, error) {
 	var steps int
 	if c.dir != nil && c.steps == 3 && !c.dir.IsPerpendicular(dir) {
 		return nil, fmt.Errorf("too many steps in the same direction without a 90 degree turn")
@@ -91,36 +91,35 @@ func (c *Cell) Next(dir *Direction, dest *Coordinate, grid []string) (*Cell, err
 		steps = 1
 	}
 
-	newCell := &Cell{
-		c.coords.Move(dir),
-		dir,
-		steps,
-		0,
-		0,
-		0,
-	}
-
-	if !(newCell.coords.Row >= 0 && newCell.coords.Row < len(grid) && newCell.coords.Col >= 0 && newCell.coords.Col < len(grid[0])) {
+	newCoords := c.coords.Move(dir)
+	if !(newCoords.Row >= 0 && newCoords.Row < len(grid) && newCoords.Col >= 0 && newCoords.Col < len(grid[0])) {
 		return nil, fmt.Errorf("invalid cell")
 	}
 
 	// Manhattan distance is our h estimate
-	newCell.h = (dest.Row - newCell.coords.Row) + (dest.Col - newCell.coords.Col)
-	newCell.g = c.g + HeatLoss(newCell.coords.Row, newCell.coords.Col, grid)
-	newCell.f = newCell.g + newCell.h
+	h := (dest.Row - newCoords.Row) + (dest.Col - newCoords.Col)
+	g := c.g + grid[newCoords.Row][newCoords.Col]
 
-	return newCell, nil
+	return &Cell{
+		newCoords,
+		dir,
+		steps,
+		g + h,
+		g,
+		h,
+	}, nil
 }
 
 func (c *Cell) CellState() string {
 	return fmt.Sprintf("Cell{%s, %s, %d}", c.coords.String(), c.dir, c.steps)
 }
 
-func ReconstructPath(cameFrom map[string]*Cell, current *Cell) [][]int {
-	totalPath := [][]int{{current.coords.Row, current.coords.Col}}
+func ReconstructPath(cameFrom map[string]*Cell, current *Cell) ([][]int, int) {
+	path := [][]int{{current.coords.Row, current.coords.Col}}
+	heatLoss := current.f
 	for {
 		if prev, ok := cameFrom[current.CellState()]; ok {
-			totalPath = append(totalPath, []int{current.coords.Row, current.coords.Col})
+			path = append(path, []int{current.coords.Row, current.coords.Col})
 			current = prev
 		} else {
 			break
@@ -128,9 +127,9 @@ func ReconstructPath(cameFrom map[string]*Cell, current *Cell) [][]int {
 	}
 
 	// Reverse the path to get the path from source to destination
-	slices.Reverse(totalPath)
+	slices.Reverse(path)
 
-	return totalPath
+	return path, heatLoss
 }
 
 func HeatLoss(row, col int, grid []string) int {
@@ -138,17 +137,8 @@ func HeatLoss(row, col int, grid []string) int {
 	return h
 }
 
-func directions() []*Direction {
-	return []*Direction{
-		{0, 1},  // right
-		{0, -1}, // left
-		{1, 0},  // "down"
-		{-1, 0}, // "up"
-	}
-}
-
 // An A* implementation!
-func AStarSearch(grid []string, src, dest *Coordinate) ([][]int, [][]int) {
+func AStarSearch(grid [][]int, src, dest *Coordinate) ([][]int, int, [][]int) {
 	// Initialize the closed list (visited cells)
 	seen := map[string]*Cell{}
 	// Track the best paths
@@ -172,14 +162,20 @@ func AStarSearch(grid []string, src, dest *Coordinate) ([][]int, [][]int) {
 	for len(*openSet) > 0 {
 		current := heap.Pop(openSet).(*Cell)
 
+		if current.coords.Equals(dest) {
+			path, heatLoss := ReconstructPath(cameFrom, current)
+			return path, heatLoss, gScore
+		}
+
 		slog.Debug("popped!", "cell", current, "open list len", len(*openSet))
 
-		if current.coords.Equals(dest) {
-			return ReconstructPath(cameFrom, current), gScore
-		}
 		// For each direction, check the successors
-		for _, dir := range directions() {
-			// Cell{(0,11), f: 58, g: 45, h: 13, parents: [(0,10) (1,10) (2,10) (2,11) (0,12)]
+		for _, dir := range []*Direction{
+			{0, 1},  // right
+			{0, -1}, // left
+			{1, 0},  // "down"
+			{-1, 0}, // "up"
+		} {
 			neighbor, err := current.Next(dir, dest, grid)
 			if err != nil {
 				slog.Debug("invalid state", "cell", current, "dir", dir, "error", err)
@@ -233,16 +229,24 @@ func PrintCellDetails(cellDetails [][]int) {
 func partOne(puzzleFile string) {
 	slog.Info("Day Seventeen part one", "puzzle file", puzzleFile)
 	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+	grid := make([][]int, len(rows))
+	for i, row := range rows {
+		grid[i] = make([]int, len(row))
+		for j, cell := range row {
+			h, _ := strconv.Atoi(string(cell))
+			grid[i][j] = h
+		}
+	}
 
 	src := &Coordinate{0, 0}
 	dest := &Coordinate{len(rows) - 1, len(rows[0]) - 1}
 
-	path, gScore := AStarSearch(rows, src, dest)
+	path, heatLoss, gScore := AStarSearch(grid, src, dest)
 
 	PrintPath(path, rows)
 	PrintCellDetails(gScore)
 
-	slog.Info("The path from source to destination found", "path", path, "heat loss", gScore[dest.Row][dest.Col])
+	slog.Info("The path from source to destination found", "path", path, "heat loss", heatLoss)
 }
 
 func partTwo(puzzleFile string) {
