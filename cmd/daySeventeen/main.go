@@ -53,19 +53,6 @@ func (d *Direction) Equals(other *Direction) bool {
 	return d.Row == other.Row && d.Col == other.Col
 }
 
-func (d *Direction) IsPerpendicular(other *Direction) bool {
-	if (d.Row == 0 && d.Col == 1) || (d.Row == 0 && d.Col == -1) {
-		if (other.Row == 1 && other.Col == 0) || (other.Row == -1 && other.Col == 0) {
-			return true
-		}
-	} else if (d.Row == 1 && d.Col == 0) || (d.Row == -1 && d.Col == 0) {
-		if (other.Row == 0 && other.Col == 1) || (other.Row == 0 && other.Col == -1) {
-			return true
-		}
-	}
-	return false
-}
-
 type Cell struct {
 	coords *Coordinate
 	dir    *Direction
@@ -79,11 +66,27 @@ func (c *Cell) String() string {
 	return fmt.Sprintf("Cell{%s, dir: %s, steps: %d, f: %d, g: %d, h: %d}", c.coords.String(), c.dir, c.steps, c.f, c.g, c.h)
 }
 
+func (c *Cell) Directions() []*Direction {
+	if c.dir == nil {
+		// Start point, only left and "down" are valid
+		return []*Direction{
+			{0, 1},
+			{1, 0},
+		}
+	}
+	dirs := []*Direction{
+		// Nifty transform for turns
+		{-c.dir.Col, c.dir.Row},
+		{c.dir.Col, -c.dir.Row},
+	}
+	if c.steps < 3 {
+		dirs = append(dirs, c.dir)
+	}
+	return dirs
+}
+
 func (c *Cell) Next(dir *Direction, dest *Coordinate, grid [][]int) (*Cell, error) {
 	var steps int
-	if c.dir != nil && c.steps == 3 && !c.dir.IsPerpendicular(dir) {
-		return nil, fmt.Errorf("too many steps in the same direction without a 90 degree turn")
-	}
 
 	if c.dir != nil && c.dir.Equals(dir) {
 		steps = c.steps + 1
@@ -114,12 +117,11 @@ func (c *Cell) CellState() string {
 	return fmt.Sprintf("Cell{%s, %s, %d}", c.coords.String(), c.dir, c.steps)
 }
 
-func ReconstructPath(cameFrom map[string]*Cell, current *Cell) ([][]int, int) {
-	path := [][]int{{current.coords.Row, current.coords.Col}}
-	heatLoss := current.f
+func ReconstructPath(cameFrom map[string]*Cell, current *Cell) []*Cell {
+	path := []*Cell{current}
 	for {
 		if prev, ok := cameFrom[current.CellState()]; ok {
-			path = append(path, []int{current.coords.Row, current.coords.Col})
+			path = append(path, prev)
 			current = prev
 		} else {
 			break
@@ -129,7 +131,7 @@ func ReconstructPath(cameFrom map[string]*Cell, current *Cell) ([][]int, int) {
 	// Reverse the path to get the path from source to destination
 	slices.Reverse(path)
 
-	return path, heatLoss
+	return path
 }
 
 func HeatLoss(row, col int, grid []string) int {
@@ -138,7 +140,7 @@ func HeatLoss(row, col int, grid []string) int {
 }
 
 // An A* implementation!
-func AStarSearch(grid [][]int, src, dest *Coordinate) ([][]int, int, [][]int) {
+func AStarSearch(grid [][]int, src, dest *Coordinate) ([]*Cell, int, [][]int) {
 	// Initialize the closed list (visited cells)
 	seen := map[string]*Cell{}
 	// Track the best paths
@@ -163,19 +165,13 @@ func AStarSearch(grid [][]int, src, dest *Coordinate) ([][]int, int, [][]int) {
 		current := heap.Pop(openSet).(*Cell)
 
 		if current.coords.Equals(dest) {
-			path, heatLoss := ReconstructPath(cameFrom, current)
-			return path, heatLoss, gScore
+			return ReconstructPath(cameFrom, current), current.f, gScore
 		}
 
 		slog.Debug("popped!", "cell", current, "open list len", len(*openSet))
 
 		// For each direction, check the successors
-		for _, dir := range []*Direction{
-			{0, 1},  // right
-			{0, -1}, // left
-			{1, 0},  // "down"
-			{-1, 0}, // "up"
-		} {
+		for _, dir := range current.Directions() {
 			neighbor, err := current.Next(dir, dest, grid)
 			if err != nil {
 				slog.Debug("invalid state", "cell", current, "dir", dir, "error", err)
@@ -197,17 +193,25 @@ func AStarSearch(grid [][]int, src, dest *Coordinate) ([][]int, int, [][]int) {
 		}
 	}
 
-	PrintCellDetails(gScore)
 	panic("Did not find the destination cell")
 }
 
-func PrintPath(path [][]int, grid []string) {
-	for _, coord := range path {
-		row := coord[0]
-		col := coord[1]
-		grid[row] = grid[row][:col] + "X" + grid[row][col+1:]
+func PrintPath(path []*Cell, grid []string) {
+	for _, c := range path {
+		row := c.coords.Row
+		col := c.coords.Col
+		dir := "X"
+		if c.dir != nil {
+			dir = c.dir.String()
+		}
+		grid[row] = grid[row][:col] + dir + grid[row][col+1:]
 	}
 	os.WriteFile("/tmp/grid.txt", []byte(strings.Join(grid, "\n")), 0644)
+	niceCellPath := []string{}
+	for _, c := range path {
+		niceCellPath = append(niceCellPath, c.CellState())
+	}
+	os.WriteFile("/tmp/path.txt", []byte(strings.Join(niceCellPath, "\n")), 0644)
 }
 
 func PrintCellDetails(cellDetails [][]int) {
