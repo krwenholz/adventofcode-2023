@@ -35,6 +35,11 @@ func (d DigCommand) String() string {
 	return fmt.Sprintf("%s %d #%s", d.Dir, d.Dist, d.Color)
 }
 
+type Space struct {
+	Shape string
+	Color string
+}
+
 func parseCommands(puzzleFile string) []*DigCommand {
 	rawCommands := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
 
@@ -65,43 +70,54 @@ func parseCommands(puzzleFile string) []*DigCommand {
 	return commands
 }
 
-func inHole(row, col, minX, maxX int, grid map[int]map[int]string) bool {
-	intersections := 0
-	onEdge := false
-	if col-minX < maxX-col {
-		// closer to the left side
-		for i := col; i >= minX; i-- {
-			if _, ok := grid[row][i]; ok {
-				// we're on the edge
-				onEdge = true
-			} else {
-				if onEdge {
-					onEdge = false
-					intersections++
-				}
-			}
+func cornerShape(prev, next *DigCommand) string {
+	switch prev.Dir {
+	case "R":
+		switch next.Dir {
+		case "U":
+			return "J"
+		case "D":
+			return "7"
+		case "R":
+			return "-"
+		case "L":
+			return "-"
 		}
-		if onEdge {
-			intersections++
+	case "L":
+		switch next.Dir {
+		case "U":
+			return "L"
+		case "D":
+			return "F"
+		case "R":
+			return "-"
+		case "L":
+			return "-"
 		}
-	} else {
-		// closer to the right side
-		for i := col; i <= maxX; i++ {
-			if _, ok := grid[row][i]; ok {
-				// we're on the edge
-				onEdge = true
-			} else {
-				if onEdge {
-					onEdge = false
-					intersections++
-				}
-			}
+	case "U":
+		switch next.Dir {
+		case "U":
+			return "|"
+		case "D":
+			return "|"
+		case "R":
+			return "F"
+		case "L":
+			return "7"
 		}
-		if onEdge {
-			intersections++
+	case "D":
+		switch next.Dir {
+		case "U":
+			return "|"
+		case "D":
+			return "|"
+		case "R":
+			return "L"
+		case "L":
+			return "J"
 		}
 	}
-	return intersections%2 == 1
+	return ""
 }
 
 func partOne(puzzleFile string) {
@@ -110,9 +126,9 @@ func partOne(puzzleFile string) {
 	commands := parseCommands(puzzleFile)
 
 	maxX, maxY, minX, minY := 0, 0, 0, 0
-	grid := map[int]map[int]string{}
+	grid := map[int]map[int]*Space{}
 	pos := &Coordinate{0, 0}
-	for _, c := range commands {
+	for cI, c := range commands {
 		for i := 0; i < c.Dist; i++ {
 			switch c.Dir {
 			case "R":
@@ -139,24 +155,48 @@ func partOne(puzzleFile string) {
 			}
 
 			if grid[pos.Row] == nil {
-				grid[pos.Row] = map[int]string{}
+				grid[pos.Row] = map[int]*Space{}
 			}
-			grid[pos.Row][pos.Col] = c.Color
+
+			var shape string
+			if i == c.Dist-1 {
+				shape = cornerShape(c, commands[(cI+1)%len(commands)])
+			} else {
+				switch c.Dir {
+				case "R":
+					shape = "-"
+				case "L":
+					shape = "-"
+				case "U":
+					shape = "|"
+				case "D":
+					shape = "|"
+				}
+			}
+
+			grid[pos.Row][pos.Col] = &Space{shape, c.Color}
 		}
 	}
 
 	filledPositions := 0
 	printGrid := ""
 	for row := maxY; row >= minY; row-- {
-		// scan each row
-		// if we find a color, we start counting until we hit the next color
 		filledThisRow := 0
+		wallCount := 0
 		for col := minX; col <= maxX; col++ {
-			if _, ok := grid[row][col]; ok {
+			if s, ok := grid[row][col]; ok {
 				filledThisRow++
-				printGrid += "#"
+				printGrid += s.Shape
+				switch s.Shape {
+				case "|":
+					wallCount++
+				case "L":
+					wallCount++
+				case "J":
+					wallCount++
+				}
 			} else {
-				if inHole(row, col, minX, maxX, grid) {
+				if wallCount%2 == 1 {
 					filledThisRow++
 				}
 				printGrid += "."
