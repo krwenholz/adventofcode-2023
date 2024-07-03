@@ -104,6 +104,7 @@ func (c *Cell) Next(dir *Direction, dest *Coordinate, grid []string) (*Cell, err
 		return nil, fmt.Errorf("invalid cell")
 	}
 
+	// Manhattan distance is our h estimate
 	newCell.h = (dest.Row - newCell.coords.Row) + (dest.Col - newCell.coords.Col)
 	newCell.g = c.g + HeatLoss(newCell.coords.Row, newCell.coords.Col, grid)
 	newCell.f = newCell.g + newCell.h
@@ -205,29 +206,28 @@ func AStarSearch(grid []string, src, dest *Coordinate) ([][]int, [][]int) {
 }
 
 func PrintPath(path [][]int, grid []string) {
-	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
-		return
-	}
 	for _, coord := range path {
 		row := coord[0]
 		col := coord[1]
 		grid[row] = grid[row][:col] + "X" + grid[row][col+1:]
 	}
-	for _, row := range grid {
-		fmt.Println(row)
-	}
+	os.WriteFile("/tmp/grid.txt", []byte(strings.Join(grid, "\n")), 0644)
 }
 
 func PrintCellDetails(cellDetails [][]int) {
-	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
-		return
-	}
+	out := ""
 	for _, row := range cellDetails {
 		for _, cell := range row {
-			fmt.Printf("%03d ", cell)
+			if cell == int(math.Inf(1)) {
+				out += "---- "
+				continue
+			}
+
+			out += fmt.Sprintf("%04d ", cell)
 		}
-		fmt.Print("\n")
+		out += "\n"
 	}
+	os.WriteFile("/tmp/cells.txt", []byte(out), 0644)
 }
 
 func partOne(puzzleFile string) {
