@@ -4,6 +4,7 @@ import (
 	"adventofcode/cmd/fileReader"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ type Space struct {
 	Color string
 }
 
-func parseCommands(puzzleFile string) []*DigCommand {
+func ParseCommands(puzzleFile string) []*DigCommand {
 	rawCommands := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
 
 	commandLexer := lexer.MustSimple([]lexer.SimpleRule{
@@ -71,144 +72,99 @@ func parseCommands(puzzleFile string) []*DigCommand {
 	return commands
 }
 
-func cornerShape(prev, next *DigCommand) string {
-	switch prev.Dir {
-	case "R":
-		switch next.Dir {
-		case "U":
-			return "J"
-		case "D":
-			return "7"
-		case "R":
-			return "-"
-		case "L":
-			return "-"
-		}
-	case "L":
-		switch next.Dir {
-		case "U":
-			return "L"
-		case "D":
-			return "F"
-		case "R":
-			return "-"
-		case "L":
-			return "-"
-		}
-	case "U":
-		switch next.Dir {
-		case "U":
-			return "|"
-		case "D":
-			return "|"
-		case "R":
-			return "F"
-		case "L":
-			return "7"
-		}
-	case "D":
-		switch next.Dir {
-		case "U":
-			return "|"
-		case "D":
-			return "|"
-		case "R":
-			return "L"
-		case "L":
-			return "J"
-		}
+type Map struct {
+	MaxX            int
+	MinX            int
+	MaxY            int
+	MinY            int
+	VerticesOrdered []*Coordinate
+	VerticesMapped  map[string]bool
+}
+
+func (m *Map) AddVertex(c *Coordinate) {
+	m.VerticesOrdered = append(m.VerticesOrdered, c)
+	m.VerticesMapped[c.String()] = true
+
+	if c.Col > m.MaxX {
+		m.MaxX = c.Col
 	}
-	return ""
+	if c.Col < m.MinX {
+		m.MinX = c.Col
+	}
+	if c.Row > m.MaxY {
+		m.MaxY = c.Row
+	}
+	if c.Row < m.MinY {
+		m.MinY = c.Row
+	}
+}
+
+func BuildMap(commands []*DigCommand) *Map {
+	maxX, maxY, minX, minY := 0, 0, 0, 0
+	theMap := &Map{maxX, minX, maxY, minY, []*Coordinate{}, map[string]bool{}}
+	pos := &Coordinate{0, 0}
+	for _, c := range commands {
+		switch c.Dir {
+		case "R":
+			pos.Col += c.Dist
+		case "L":
+			pos.Col -= c.Dist
+		case "U":
+			pos.Row += c.Dist
+		case "D":
+			pos.Row -= c.Dist
+		}
+
+		theMap.AddVertex(&Coordinate{pos.Row, pos.Col})
+	}
+
+	return theMap
+}
+
+// Hello [Shoelace Formula](https://en.wikipedia.org/wiki/Shoelace_formula#Shoelace_formula)!
+func CalculateArea(theMap *Map) float64 {
+	area := 0.0
+	borderLen := 0.0
+	for i := 0; i < len(theMap.VerticesOrdered); i++ {
+		c1 := theMap.VerticesOrdered[i]
+		c2 := theMap.VerticesOrdered[(i+1)%len(theMap.VerticesOrdered)]
+		area += float64(c1.Row*c2.Col - c2.Row*c1.Col)
+		borderLen += math.Abs(float64(c1.Col - c2.Col + c2.Row - c1.Row))
+	}
+
+	return area/2 + borderLen/2 + 1
+}
+
+func PrintableGrid(theMap *Map) string {
+	printableGrid := []string{}
+	for row := theMap.MaxY; row >= theMap.MinY; row-- {
+		b := strings.Builder{}
+		b.Grow(theMap.MaxX - theMap.MinX + 1)
+		for col := theMap.MinX; col <= theMap.MaxX; col++ {
+			c := &Coordinate{row, col}
+			if theMap.VerticesMapped[c.String()] {
+				b.WriteString("#")
+			} else {
+				b.WriteString(".")
+			}
+		}
+		printableGrid = append(printableGrid, b.String())
+	}
+
+	return strings.Join(printableGrid, "\n")
 }
 
 func partOne(puzzleFile string) {
 	slog.Info("Day Eighteen part one", "puzzle file", puzzleFile)
 
-	commands := parseCommands(puzzleFile)
+	commands := ParseCommands(puzzleFile)
 
-	maxX, maxY, minX, minY := 0, 0, 0, 0
-	grid := map[int]map[int]*Space{}
-	pos := &Coordinate{0, 0}
-	for cI, c := range commands {
-		for i := 0; i < c.Dist; i++ {
-			switch c.Dir {
-			case "R":
-				pos.Col++
-			case "L":
-				pos.Col--
-			case "U":
-				pos.Row++
-			case "D":
-				pos.Row--
-			}
+	theMap := BuildMap(commands)
+	slog.Debug("got a map!", "theMap", theMap)
 
-			if pos.Col > maxX {
-				maxX = pos.Col
-			}
-			if pos.Col < minX {
-				minX = pos.Col
-			}
-			if pos.Row > maxY {
-				maxY = pos.Row
-			}
-			if pos.Row < minY {
-				minY = pos.Row
-			}
+	printGrid := PrintableGrid(theMap)
 
-			if grid[pos.Row] == nil {
-				grid[pos.Row] = map[int]*Space{}
-			}
-
-			var shape string
-			if i == c.Dist-1 {
-				shape = cornerShape(c, commands[(cI+1)%len(commands)])
-			} else {
-				switch c.Dir {
-				case "R":
-					shape = "-"
-				case "L":
-					shape = "-"
-				case "U":
-					shape = "|"
-				case "D":
-					shape = "|"
-				}
-			}
-
-			grid[pos.Row][pos.Col] = &Space{shape, c.Color}
-		}
-	}
-
-	filledPositions := 0
-	printGrid := ""
-	for row := maxY; row >= minY; row-- {
-		filledThisRow := 0
-		wallCount := 0
-		for col := minX; col <= maxX; col++ {
-			if s, ok := grid[row][col]; ok {
-				filledThisRow++
-				printGrid += s.Shape
-				switch s.Shape {
-				case "|":
-					wallCount++
-				case "L":
-					wallCount++
-				case "J":
-					wallCount++
-				}
-			} else {
-				if wallCount%2 == 1 {
-					filledThisRow++
-				}
-				printGrid += "."
-			}
-		}
-
-		filledPositions += filledThisRow
-
-		printGrid += fmt.Sprintf(" (%d) \n", filledThisRow)
-		slog.Debug("row filled", "row", row, "filledThisRow", filledThisRow)
-	}
+	filledPositions := CalculateArea(theMap)
 
 	os.WriteFile("/tmp/dayEighteenGrid.txt", []byte(printGrid), 0644)
 
@@ -218,12 +174,10 @@ func partOne(puzzleFile string) {
 func partTwo(puzzleFile string) {
 	slog.Info("Day Eighteen part two", "puzzle file", puzzleFile)
 
-	commands := parseCommands(puzzleFile)
+	bustedCommands := ParseCommands(puzzleFile)
 
-	maxX, maxY, minX, minY := 0, 0, 0, 0
-	grid := map[int]map[int]*Space{}
-	pos := &Coordinate{0, 0}
-	for cI, bustedCommand := range commands {
+	fixedCommands := []*DigCommand{}
+	for _, bustedCommand := range bustedCommands {
 		dist, _ := strconv.ParseInt(bustedCommand.Color[:5], 16, 32)
 		var dir string
 		switch bustedCommand.Color[5:] {
@@ -239,123 +193,16 @@ func partTwo(puzzleFile string) {
 
 		c := &DigCommand{dir, int(dist), bustedCommand.Color}
 		slog.Debug("fixed command", "bustedCommand", bustedCommand, "c", c)
-
-		for i := 0; i < c.Dist; i++ {
-			switch c.Dir {
-			case "R":
-				pos.Col++
-			case "L":
-				pos.Col--
-			case "U":
-				pos.Row++
-			case "D":
-				pos.Row--
-			}
-
-			if pos.Col > maxX {
-				maxX = pos.Col
-			}
-			if pos.Col < minX {
-				minX = pos.Col
-			}
-			if pos.Row > maxY {
-				maxY = pos.Row
-			}
-			if pos.Row < minY {
-				minY = pos.Row
-			}
-
-			if grid[pos.Row] == nil {
-				grid[pos.Row] = map[int]*Space{}
-			}
-
-			var shape string
-			if i == c.Dist-1 {
-				shape = cornerShape(c, commands[(cI+1)%len(commands)])
-			} else {
-				switch c.Dir {
-				case "R":
-					shape = "-"
-				case "L":
-					shape = "-"
-				case "U":
-					shape = "|"
-				case "D":
-					shape = "|"
-				}
-			}
-
-			grid[pos.Row][pos.Col] = &Space{shape, c.Color}
-		}
+		fixedCommands = append(fixedCommands, c)
 	}
 
-	slog.Info("Finished building grid", "size", len(grid), "width", maxX-minX, "height", maxY-minY)
-
-	printableGrid := []string{}
-	condensedGrid := map[string]int{}
-	for row := maxY; row >= minY; row-- {
-		b := strings.Builder{}
-		b.Grow(maxX - minX + 1)
-		for col := minX; col <= maxX; col++ {
-			if s, ok := grid[row][col]; ok {
-				b.WriteString(s.Shape)
-			} else {
-				b.WriteString(".")
-			}
-		}
-		s := b.String()
-		printableGrid = append(printableGrid, s)
-		if _, ok := condensedGrid[s]; !ok {
-			condensedGrid[s] = 0
-		}
-		condensedGrid[s] = condensedGrid[s] + 1
-	}
-
-	slog.Info("Finished building condensed grid", "old row count", maxY-minY, "size", len(condensedGrid))
-
-	// This is slow. Ideas:
-	// 1. Hash the rows and use that to dedupe some computations (looks like there's symmetry in the grid)
-	// 2. Parallelize: done, went from hours to 30 minutes (yay)
-	filledPositions := 0
-	i := 0
-	for row := range condensedGrid {
-		filledThisRow := 0
-		wallCount := 0
-		for _, c := range row {
-			switch c {
-			// Just boring holes
-			case '-':
-				filledThisRow++
-			case '7':
-				filledThisRow++
-			case 'F':
-				filledThisRow++
-			// Now the interesting cases describing "wall containment"
-			case '|':
-				filledThisRow++
-				wallCount++
-			case 'L':
-				filledThisRow++
-				wallCount++
-			case 'J':
-				filledThisRow++
-				wallCount++
-			case '.':
-				if wallCount%2 == 1 {
-					filledThisRow++
-				}
-			}
-		}
-
-		filledPositions += filledThisRow
-
-		slog.Debug("row filling", "row", i, "percent", float64(i)/float64(len(condensedGrid))*100, "val", filledThisRow)
-		i++
-	}
+	theMap := BuildMap(fixedCommands)
+	printableGrid := PrintableGrid(theMap)
+	filledPositions := CalculateArea(theMap)
 
 	slog.Info("finished digging", "filled positions", filledPositions)
 
-	os.WriteFile("/tmp/dayEighteenGrid.txt", []byte(strings.Join(printableGrid, "\n")), 0644)
+	os.WriteFile("/tmp/dayEighteenGrid.txt", []byte(printableGrid), 0644)
 }
 
 type NoopStringBuilder struct{}
