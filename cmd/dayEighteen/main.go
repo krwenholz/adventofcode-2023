@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer"
@@ -292,9 +291,11 @@ func partTwo(puzzleFile string) {
 
 	slog.Info("Finished building grid", "size", len(grid), "width", maxX-minX, "height", maxY-minY)
 
-	condensedGrid := map[int]string{}
+	printableGrid := []string{}
+	condensedGrid := map[string]int{}
 	for row := maxY; row >= minY; row-- {
 		b := strings.Builder{}
+		b.Grow(maxX - minX + 1)
 		for col := minX; col <= maxX; col++ {
 			if s, ok := grid[row][col]; ok {
 				b.WriteString(s.Shape)
@@ -302,79 +303,59 @@ func partTwo(puzzleFile string) {
 				b.WriteString(".")
 			}
 		}
-		condensedGrid[row] = b.String()
+		s := b.String()
+		printableGrid = append(printableGrid, s)
+		if _, ok := condensedGrid[s]; !ok {
+			condensedGrid[s] = 0
+		}
+		condensedGrid[s] = condensedGrid[s] + 1
 	}
 
-	slog.Info("Finished building condensed grid")
+	slog.Info("Finished building condensed grid", "old row count", maxY-minY, "size", len(condensedGrid))
 
-	var wg sync.WaitGroup
-	ress := make(chan int)
-	wg.Add(maxY - minY + 1)
-
-	go func() {
-		wg.Wait()
-		close(ress)
-	}()
-
-	seen := sync.Map{}
 	// This is slow. Ideas:
 	// 1. Hash the rows and use that to dedupe some computations (looks like there's symmetry in the grid)
 	// 2. Parallelize: done, went from hours to 30 minutes (yay)
-	for row := maxY; row >= minY; row-- {
-		go func(row int) {
-			defer wg.Done()
-
-			if v, ok := seen.Load(condensedGrid[row]); ok {
-				ress <- v.(int)
-				return
-			}
-
-			filledThisRow := 0
-			wallCount := 0
-			for col := 0; col < len(condensedGrid[row]); col++ {
+	filledPositions := 0
+	i := 0
+	for row := range condensedGrid {
+		filledThisRow := 0
+		wallCount := 0
+		for _, c := range row {
+			switch c {
+			// Just boring holes
+			case '-':
 				filledThisRow++
-				switch condensedGrid[row][col] {
-				// Just boring holes
-				case '-':
+			case '7':
+				filledThisRow++
+			case 'F':
+				filledThisRow++
+			// Now the interesting cases describing "wall containment"
+			case '|':
+				filledThisRow++
+				wallCount++
+			case 'L':
+				filledThisRow++
+				wallCount++
+			case 'J':
+				filledThisRow++
+				wallCount++
+			case '.':
+				if wallCount%2 == 1 {
 					filledThisRow++
-				case '7':
-					filledThisRow++
-				case 'F':
-					filledThisRow++
-				// Now the interesting cases describing "wall containment"
-				case '|':
-					filledThisRow++
-					wallCount++
-				case 'L':
-					filledThisRow++
-					wallCount++
-				case 'J':
-					filledThisRow++
-					wallCount++
-				case '.':
-					if wallCount%2 == 1 {
-						filledThisRow++
-					}
 				}
 			}
+		}
 
-			if row%500 == 0 {
-				slog.Debug("row filling", "row", row, "percent", float64((maxY-row)*100)/float64((maxY-minY)), "val", filledThisRow)
-			}
+		filledPositions += filledThisRow
 
-			seen.Store(condensedGrid[row], filledThisRow)
-			ress <- filledThisRow
-		}(row)
-	}
-
-	filledPositions := 0
-	for r := range ress {
-		filledPositions += r
+		slog.Debug("row filling", "row", i, "percent", float64(i)/float64(len(condensedGrid))*100, "val", filledThisRow)
+		i++
 	}
 
 	slog.Info("finished digging", "filled positions", filledPositions)
 
-	os.WriteFile("/tmp/dayEighteenGrid.txt", []byte(strings.Join(condensedGrid, "\n")), 0644)
+	os.WriteFile("/tmp/dayEighteenGrid.txt", []byte(strings.Join(printableGrid, "\n")), 0644)
 }
 
 type NoopStringBuilder struct{}
