@@ -42,6 +42,8 @@ func init() {
 	// Logging configuration
 	var logLevel slog.Level
 	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
+	case "trace":
+		logLevel = slog.LevelDebug - 1
 	case "debug":
 		logLevel = slog.LevelDebug
 	default:
