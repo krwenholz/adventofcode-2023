@@ -197,12 +197,12 @@ func partTwo(puzzleFile string) {
 	}
 
 	theMap := BuildMap(fixedCommands)
-	printableGrid := PrintableGrid(theMap)
+
+	slog.Debug("built our map", "theMap", theMap)
+
 	filledPositions := CalculateArea(theMap)
 
-	slog.Info("finished digging", "filled positions", filledPositions)
-
-	os.WriteFile("/tmp/dayEighteenGrid.txt", []byte(printableGrid), 0644)
+	slog.Info("finished digging", "filled positions", fmt.Sprintf("%.0f", filledPositions))
 }
 
 type NoopStringBuilder struct{}
