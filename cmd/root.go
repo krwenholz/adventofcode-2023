@@ -22,7 +22,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	start := time.Now()
 	defer func() {
-		slog.Info("finished", "time", time.Now().Sub(start).Milliseconds())
+		slog.Info("finished", "time", time.Now().Sub(start).Microseconds())
 	}()
 	err := rootCmd.Execute()
 	if err != nil {
