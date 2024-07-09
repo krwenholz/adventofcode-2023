@@ -12,17 +12,23 @@ import (
 )
 
 type Workflow struct {
-	Name        string  `@Ident "{"`
-	Rule        []*Rule `@@*`
-	DefaultRule string  `@Ident "}"`
+	Name          string        `@Ident "{"`
+	Rules         []*Rule       `@@*`
+	DefaultRule   string        `@Ident "}"`
+	ValidRanges   []*ValidRange // the ranges that lead to an A for this workflow
+	pathsExplored int
 }
 
 func (w *Workflow) String() string {
-	return fmt.Sprintf("Workflow: %s, Rules: %v", w.Name, w.Rule)
+	return fmt.Sprintf("Workflow: %s, Rules: %v, Ranges: %v, Explored: %d", w.Name, w.Rules, w.ValidRanges, w.pathsExplored)
+}
+
+func (w *Workflow) AllPathsExplored() bool {
+	return w.pathsExplored == len(w.Rules)+1
 }
 
 func (w *Workflow) Eval(p *Part) string {
-	for _, r := range w.Rule {
+	for _, r := range w.Rules {
 		n := r.Eval(p)
 		if n != "" {
 			slog.Debug("Matched workflow rule", "rule", r, "part", p, "next", n)
@@ -178,10 +184,6 @@ func partOne(puzzleFile string) {
 	}
 
 	slog.Info("Evaluated all parts", "accepted ratings", acceptedRatings)
-}
-
-func partTwo(puzzleFile string) {
-	slog.Info("Day Nineteen part two", "puzzle file", puzzleFile)
 }
 
 var Cmd = &cobra.Command{
