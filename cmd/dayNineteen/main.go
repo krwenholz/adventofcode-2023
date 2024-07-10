@@ -12,19 +12,14 @@ import (
 )
 
 type Workflow struct {
-	Name          string        `@Ident "{"`
-	Rules         []*Rule       `@@*`
-	DefaultRule   string        `@Ident "}"`
-	ValidRanges   []*ValidRange // the ranges that lead to an A for this workflow
-	pathsExplored int
+	Name        string        `@Ident "{"`
+	Rules       []*Rule       `@@*`
+	DefaultRule string        `@Ident "}"`
+	ValidRanges []*ValidRange // the ranges that lead to an A for this workflow
 }
 
 func (w *Workflow) String() string {
-	return fmt.Sprintf("Workflow: %s, Rules: %v, Ranges: %v, Explored: %d", w.Name, w.Rules, w.ValidRanges, w.pathsExplored)
-}
-
-func (w *Workflow) AllPathsExplored() bool {
-	return w.pathsExplored == len(w.Rules)+1
+	return fmt.Sprintf("Workflow: %s, Rules: %v, Ranges: %v", w.Name, w.Rules, w.ValidRanges)
 }
 
 func (w *Workflow) Eval(p *Part) string {

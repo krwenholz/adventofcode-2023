@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -22,7 +23,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	start := time.Now()
 	defer func() {
-		slog.Info("finished", "time", time.Now().Sub(start).Microseconds())
+		slog.Info("finished", "time", fmt.Sprintf("%.2f", float64(time.Now().Sub(start).Microseconds())/1000.0))
 	}()
 	err := rootCmd.Execute()
 	if err != nil {

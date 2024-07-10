@@ -3,6 +3,7 @@ package dayNineteen
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 )
 
 /*
@@ -76,132 +77,148 @@ func max(a, b int) int {
 }
 
 func (v *ValidRange) ConstrainWithRule(r *Rule) *ValidRange {
+	newV := *v
 	switch r.Category {
 	case "x":
 		if r.Comparator == ">" {
-			v.MinX = min(v.MinX, r.Value)
+			newV.MinX = max(newV.MinX, r.Value) + 1
 		} else {
-			v.MaxX = max(v.MaxX, r.Value)
+			newV.MaxX = min(newV.MaxX, r.Value) - 1
 		}
 	case "m":
 		if r.Comparator == ">" {
-			v.MinM = min(v.MinM, r.Value)
+			newV.MinM = max(newV.MinM, r.Value) + 1
 		} else {
-			v.MaxM = max(v.MaxM, r.Value)
+			newV.MaxM = min(newV.MaxM, r.Value) - 1
 		}
 	case "a":
 		if r.Comparator == ">" {
-			v.MinA = min(v.MinA, r.Value)
+			newV.MinA = max(newV.MinA, r.Value) + 1
 		} else {
-			v.MaxA = max(v.MaxA, r.Value)
+			newV.MaxA = min(newV.MaxA, r.Value) - 1
 		}
 	case "s":
 		if r.Comparator == ">" {
-			v.MinS = min(v.MinS, r.Value)
+			newV.MinS = max(newV.MinS, r.Value) + 1
 		} else {
-			v.MaxS = max(v.MaxS, r.Value)
+			newV.MaxS = min(newV.MaxS, r.Value) - 1
 		}
 	}
 
-	return v
+	return &newV
 }
 
 func (v *ValidRange) EvadeRule(r *Rule) *ValidRange {
+	newV := *v
 	switch r.Category {
 	case "x":
 		if r.Comparator == "<" {
-			v.MinX = max(v.MinX, r.Value)
+			newV.MinX = max(newV.MinX, r.Value)
 		} else {
-			v.MaxX = min(v.MaxX, r.Value)
+			newV.MaxX = min(newV.MaxX, r.Value)
 		}
 	case "m":
 		if r.Comparator == "<" {
-			v.MinM = max(v.MinM, r.Value)
+			newV.MinM = max(newV.MinM, r.Value)
 		} else {
-			v.MaxM = min(v.MaxM, r.Value)
+			newV.MaxM = min(newV.MaxM, r.Value)
 		}
 	case "a":
 		if r.Comparator == "<" {
-			v.MinA = max(v.MinA, r.Value)
+			newV.MinA = max(newV.MinA, r.Value)
 		} else {
-			v.MaxA = min(v.MaxA, r.Value)
+			newV.MaxA = min(newV.MaxA, r.Value)
 		}
 	case "s":
 		if r.Comparator == "<" {
-			v.MinS = max(v.MinS, r.Value)
+			newV.MinS = max(newV.MinS, r.Value)
 		} else {
-			v.MaxS = min(v.MaxS, r.Value)
+			newV.MaxS = min(newV.MaxS, r.Value)
 		}
 	}
 
-	return v
+	return &newV
 }
 
-func (f *Flower) FindValidRanges() []*ValidRange {
-	for !f.mappedWorkflows["in"].AllPathsExplored() {
-		for _, wf := range f.orderedWorkflows {
-			if wf.AllPathsExplored() {
-				// Been here! Let's skip.
-				continue
+func (vr *ValidRange) AllCombinations() int {
+	// The +1 ensures we _include_ our bounds
+	return ((vr.MaxX - vr.MinX + 1) *
+		(vr.MaxM - vr.MinM + 1) *
+		(vr.MaxA - vr.MinA + 1) *
+		(vr.MaxS - vr.MinS + 1))
+}
+
+func (vr *ValidRange) Finalize() {
+	vr.MinX = max(vr.MinX, 1)
+	vr.MaxX = min(vr.MaxX, 4000)
+	vr.MinM = max(vr.MinM, 1)
+	vr.MaxM = min(vr.MaxM, 4000)
+	vr.MinA = max(vr.MinA, 1)
+	vr.MaxA = min(vr.MaxA, 4000)
+	vr.MinS = max(vr.MinS, 1)
+	vr.MaxS = min(vr.MaxS, 4000)
+}
+
+func (f *Flower) FindCombinations() int {
+	finalRanges := []*ValidRange{}
+	validRanges := map[string][]*ValidRange{"in": {DefaultValidRange()}}
+	workflows := []string{"in"}
+	for len(workflows) > 0 {
+		next := f.mappedWorkflows[workflows[0]]
+		workflows = workflows[1:]
+		curRanges := validRanges[next.Name]
+		for _, r := range f.mappedWorkflows[next.Name].Rules {
+			if _, ok := validRanges[r.Destination]; !ok {
+				validRanges[r.Destination] = []*ValidRange{}
 			}
 
-			pathsExplored := 1 // default is a gimme
+			nextCurRanges := []*ValidRange{}
+			for _, vr := range curRanges {
+				constrained := vr.ConstrainWithRule(r)
+				switch r.Destination {
+				case "R":
+					// do nothing
+				case "A":
+					constrained.Finalize()
+					finalRanges = append(finalRanges, constrained)
+					slog.Debug("rule based combination", "w", next.Name, "r", r, "valid range", constrained)
+				default:
+					validRanges[r.Destination] = append(validRanges[r.Destination], constrained)
+				}
 
-			validRanges := []*ValidRange{}
-			// TODO: handle default rule
-			if wf.DefaultRule == "A" {
-				validRanges = append(validRanges, DefaultValidRange())
+				evaded := vr.EvadeRule(r)
+				nextCurRanges = append(nextCurRanges, evaded)
 			}
-			if dest, ok := f.mappedWorkflows[wf.DefaultRule]; ok {
-				validRanges = append(validRanges, dest.ValidRanges...)
+			curRanges = nextCurRanges
+
+			if r.Destination != "A" && r.Destination != "R" {
+				workflows = append(workflows, r.Destination)
 			}
+		}
 
-			// Walk the rules backward, applying constraints as we go
-			for i := len(wf.Rules) - 1; i >= 0; i-- {
-				r := wf.Rules[i]
-				nr := []*ValidRange{}
-				if r.Destination == "A" {
-					nr = append(nr, DefaultValidRange())
-					pathsExplored++
-				}
-				if r.Destination == "R" {
-					pathsExplored++
-				}
-				if dest, ok := f.mappedWorkflows[r.Destination]; ok {
-					if dest.AllPathsExplored() {
-						nr = append(nr, dest.ValidRanges...)
-						pathsExplored++
-					}
-				}
-
-				tmp := []*ValidRange{}
-				for _, vr := range validRanges {
-					tmp = append(tmp, vr.EvadeRule(r))
-				}
-				for _, vr := range nr {
-					tmp = append(tmp, vr.ConstrainWithRule(r))
-				}
-				validRanges = tmp
+		// handle default rule, no bifurcating
+		for _, vr := range curRanges {
+			switch next.DefaultRule {
+			case "R":
+				// do nothing
+			case "A":
+				vr.Finalize()
+				finalRanges = append(finalRanges, vr)
+				slog.Debug("default rule combination", "w", next.Name, "valid range", vr)
+			default:
+				validRanges[next.DefaultRule] = append(validRanges[next.DefaultRule], vr)
 			}
+		}
 
-			slog.Debug("Found valid ranges", "wf", wf.Name, "pathsExplored", pathsExplored, "ranges", validRanges)
-			wf.ValidRanges = validRanges
-			wf.pathsExplored = pathsExplored
-			f.mappedWorkflows[wf.Name] = wf
+		if next.DefaultRule != "A" && next.DefaultRule != "R" {
+			workflows = append(workflows, next.DefaultRule)
 		}
 	}
 
-	return f.mappedWorkflows["in"].ValidRanges
-}
-
-func AllCombinations(vrs []*ValidRange) int {
+	slog.Debug("Final valid ranges", "ranges", finalRanges)
 	combinations := 0
-	for _, vr := range vrs {
-		combinations += ((min(vr.MaxX, 4000) - max(vr.MinX, 1)) *
-			(min(vr.MaxM, 4000) - max(vr.MinM, 1)) *
-			(min(vr.MaxA, 4000) - max(vr.MinA, 1)) *
-			(min(vr.MaxS, 4000) - max(vr.MinS, 1)))
-		slog.Debug("Completed combinations for a valid range", "range", vr, "combinations", combinations)
+	for _, vr := range finalRanges {
+		combinations += vr.AllCombinations()
 	}
 	return combinations
 }
@@ -211,8 +228,10 @@ func partTwo(puzzleFile string) {
 
 	flower, _ := ParseCommands(puzzleFile)
 
-	vrs := flower.FindValidRanges()
-	slog.Debug("Found valid ranges", "ranges", vrs)
+	cs := flower.FindCombinations()
 
-	slog.Info("Found combinations", "ranges", vrs, "combinations", AllCombinations(vrs))
+	slog.Info("Found combinations", "combinations", cs)
+	if strings.Contains(puzzleFile, "sample") {
+		slog.Debug("Expected combinations", "expected", 167409079868000, "diff", 167409079868000-cs)
+	}
 }
