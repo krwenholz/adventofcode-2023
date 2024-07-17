@@ -4,6 +4,7 @@ import (
 	"adventofcode/cmd/coordinates"
 	"adventofcode/cmd/fileReader"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -37,8 +38,6 @@ func ReachablePlots(g []string, start *coordinates.Coordinate, steps int) int {
 		/**
 		we'll grab next positions and potentially add them to curs to step from
 		all positions can be final by
-		- stepping into, out of, and back into
-		- stepping into
 		**/
 		next := curs[0]
 		curs = curs[1:]
@@ -63,6 +62,9 @@ func ReachablePlots(g []string, start *coordinates.Coordinate, steps int) int {
 }
 
 func PrintGrid(g []string, plots map[string]bool) {
+	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
+		return
+	}
 	for i, row := range g {
 		for j, c := range row {
 			if c == '#' {
@@ -98,8 +100,69 @@ func partOne(puzzleFile string, stepCount int) {
 	slog.Info("Day TwentyOne part one", "reachable plots", plots)
 }
 
-func partTwo(puzzleFile string) {
+func NextInfinitePositions(g []string, c *coordinates.Coordinate) []*coordinates.Coordinate {
+	next := []*coordinates.Coordinate{}
+	for _, m := range coordinates.GridMoves() {
+		n := c.Move(m)
+		row := n.Row % len(g)
+		if row < 0 {
+			row = len(g) + row
+		}
+		col := n.Col % len(g[0])
+		if col < 0 {
+			col = len(g[0]) + col
+		}
+		if g[row][col] == '#' {
+			continue
+		}
+		next = append(next, n)
+	}
+	return next
+}
+
+func partTwo(puzzleFile string, steps int) {
 	slog.Info("Day TwentyOne part two", "puzzle file", puzzleFile)
+	g := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+
+	start := &coordinates.Coordinate{Row: 0, Col: 0}
+	for i, row := range g {
+		for j, c := range row {
+			if c == 'S' {
+				start = &coordinates.Coordinate{Row: i, Col: j}
+				break
+			}
+		}
+	}
+
+	curs := []*Step{{start, 0}}
+	seen := map[string]bool{}
+	finalPlots := map[string]bool{}
+	for len(curs) > 0 {
+		/**
+		we'll grab next positions and potentially add them to curs to step from
+		all positions can be final by
+		**/
+		next := curs[0]
+		curs = curs[1:]
+		nextStepNumber := next.StepNumber + 1
+		if nextStepNumber > steps {
+			continue
+		}
+		for _, n := range NextInfinitePositions(g, next.Pos) {
+			if _, ok := seen[n.String()]; !ok {
+				seen[n.String()] = true
+				curs = append(curs, &Step{n, nextStepNumber})
+			}
+			// Can only enter a plot at the end if we're at the step count or have an even number of steps left
+			if nextStepNumber == steps || (steps-nextStepNumber)%2 == 0 {
+				finalPlots[n.String()] = true
+			}
+		}
+	}
+
+	PrintGrid(g, finalPlots)
+
+	slog.Info("Day TwentyOne part two", "reachable plots", len(finalPlots))
 }
 
 var Cmd = &cobra.Command{
@@ -110,7 +173,7 @@ var Cmd = &cobra.Command{
 		if !cmd.Flag("part-two").Changed {
 			partOne(puzzleInput, stepCount)
 		} else {
-			partTwo(puzzleInput)
+			partTwo(puzzleInput, stepCount)
 		}
 	},
 }
