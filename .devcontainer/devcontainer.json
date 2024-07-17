@@ -35,7 +35,9 @@
         "GitHub.copilot",
         "GitHub.copilot-chat",
         "vscodevim.vim",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "golang.go",
+        "mkhl.direnv"
       ]
     }
   },

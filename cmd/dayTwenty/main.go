@@ -3,6 +3,8 @@ package dayTwenty
 import (
 	"fmt"
 	"log/slog"
+	"math"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -151,6 +153,66 @@ func Push(ms map[string]*Module, pushes int) (int, int) {
 	return lows, highs
 }
 
+func MinimumForRx(ms map[string]*Module) int {
+	lows, highs := 0, 0
+
+	found := map[string][]int{"ph": []int{}, "nz": []int{}, "dd": []int{}, "tx": []int{}}
+	for i := 1.0; i < math.MaxFloat64; i++ {
+		pulses := []*Pulse{{nil, Low, []string{"broadcaster"}}}
+		for len(pulses) > 0 {
+			n := pulses[0]
+			pulses = pulses[1:]
+			slog.Debug("Processing", "n", n)
+			if n.pType == Low {
+				lows += len(n.dsts)
+			} else if n.pType == High {
+				highs += len(n.dsts)
+			}
+
+			for _, d := range n.dsts {
+				m := ms[d]
+				if d == "rx" && n.pType == Low {
+					return lows + highs
+				}
+				if m == nil {
+					// Just a testing destination
+					continue
+				}
+				// Following some Reddit advice, I'm looking for numbers when one of my four inputs
+				// that lead to the "final trail" get a high pulse
+				allSeenThrice := true
+				for _, in := range []string{"ph", "nz", "dd", "tx"} {
+					if n.src != nil && n.src.Name == in && n.pType == High {
+						found[in] = append(found[in], int(i))
+
+						slog.Info("Found", "i", i, "seen", found[in], "in", in)
+					}
+					if len(found[in]) < 3 {
+						allSeenThrice = false
+					}
+				}
+
+				if allSeenThrice {
+					cycle := 1
+					for _, v := range found {
+						cycle = cycle * v[0]
+					}
+					return cycle
+				}
+				nextPulse, dsts := m.Process(n.src, n.pType)
+				if nextPulse != Nil {
+					pulses = append(pulses, &Pulse{m, nextPulse, dsts})
+				}
+			}
+		}
+		if int(i)%1000000 == 0 {
+			slog.Info("Pushed", "i", i, "%", fmt.Sprintf("%.10f", i/math.MaxFloat64*100), "lows", lows, "highs", highs)
+		}
+	}
+
+	panic("wtf")
+}
+
 func partOne(puzzleFile string, pushCount int) {
 	slog.Info("Day Twenty part one", "puzzle file", puzzleFile)
 
@@ -161,14 +223,42 @@ func partOne(puzzleFile string, pushCount int) {
 	slog.Info("Parsing modules", "low pulses", lowPulses, "high pulses", highPulses, "product", lowPulses*highPulses)
 }
 
+func PrintGraph(f string) {
+	ms := ParseModules(f)
+	fmt.Println("flowchart TD")
+	for _, m := range ms {
+		name := strings.ToUpper(m.Name)
+		switch m.ModuleKind {
+		case "":
+			fmt.Println(fmt.Sprintf("    %s(%s)", name, m.Name))
+		case "%":
+			fmt.Println(fmt.Sprintf("    %s{%s%s}", name, m.ModuleKind, m.Name))
+		case "&":
+			fmt.Println(fmt.Sprintf("    %s[%s%s]", name, m.ModuleKind, m.Name))
+		}
+		for _, r := range m.Receivers {
+			fmt.Println(fmt.Sprintf("    %s --> %s", name, strings.ToUpper(r)))
+		}
+	}
+}
+
 func partTwo(puzzleFile string) {
 	slog.Info("Day Twenty part two", "puzzle file", puzzleFile)
+
+	modules := ParseModules(puzzleFile)
+	slog.Debug("Parsed modules", "modules", modules)
+	minimumPulses := MinimumForRx(modules)
+
+	slog.Info("Minimum pulses for rx", "minimum pulses", minimumPulses)
 }
 
 var Cmd = &cobra.Command{
 	Use: "dayTwenty",
 	Run: func(cmd *cobra.Command, args []string) {
 		puzzleInput, _ := cmd.Flags().GetString("puzzle-input")
+		if cmd.Flag("print-graph").Changed {
+			PrintGraph(puzzleInput)
+		}
 		pushCount, _ := cmd.Flags().GetInt("push-count")
 		if !cmd.Flag("part-two").Changed {
 			partOne(puzzleInput, pushCount)
@@ -180,5 +270,6 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.Flags().Bool("part-two", false, "Whether to run part two of the day's challenge")
+	Cmd.Flags().Bool("print-graph", false, "print our graph")
 	Cmd.Flags().Int("push-count", 1000, "Push count")
 }
