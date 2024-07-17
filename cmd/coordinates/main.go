@@ -41,11 +41,27 @@ func (d *Direction) Equals(other *Direction) bool {
 	return d.Row == other.Row && d.Col == other.Col
 }
 
+func Up() *Direction {
+	return &Direction{-1, 0}
+}
+
+func Down() *Direction {
+	return &Direction{1, 0}
+}
+
+func Left() *Direction {
+	return &Direction{0, -1}
+}
+
+func Right() *Direction {
+	return &Direction{0, 1}
+}
+
 func GridMoves() []*Direction {
 	return []*Direction{
-		{1, 0},
-		{-1, 0},
-		{0, 1},
-		{0, -1},
+		Up(),
+		Down(),
+		Left(),
+		Right(),
 	}
 }

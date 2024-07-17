@@ -3,6 +3,7 @@ package dayTwentyOne
 import (
 	"adventofcode/cmd/coordinates"
 	"adventofcode/cmd/fileReader"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -28,6 +29,10 @@ func NextPositions(g []string, c *coordinates.Coordinate) []*coordinates.Coordin
 type Step struct {
 	Pos        *coordinates.Coordinate
 	StepNumber int
+}
+
+func (s *Step) Hash() string {
+	return fmt.Sprintf("%s-%d", s.Pos.String(), s.StepNumber%2)
 }
 
 func ReachablePlots(g []string, start *coordinates.Coordinate, steps int) int {
@@ -100,24 +105,40 @@ func partOne(puzzleFile string, stepCount int) {
 	slog.Info("Day TwentyOne part one", "reachable plots", plots)
 }
 
-func NextInfinitePositions(g []string, c *coordinates.Coordinate) []*coordinates.Coordinate {
+// Returns next valid coordinates and any coordinates that would leave the current grid
+func NextInfinitePositions(g []string, c *coordinates.Coordinate) ([]*coordinates.Coordinate, []*coordinates.Coordinate) {
 	next := []*coordinates.Coordinate{}
+	starts := []*coordinates.Coordinate{}
 	for _, m := range coordinates.GridMoves() {
 		n := c.Move(m)
-		row := n.Row % len(g)
-		if row < 0 {
-			row = len(g) + row
+
+		isStart := false
+		if n.Row < 0 {
+			n = &coordinates.Coordinate{Row: len(g) - 1, Col: n.Col}
+			isStart = true
+		} else if n.Row >= len(g) {
+			n = &coordinates.Coordinate{Row: 0, Col: n.Col}
+			isStart = true
+		} else if n.Col < 0 {
+			n = &coordinates.Coordinate{Row: n.Row, Col: len(g[0]) - 1}
+			isStart = true
+		} else if n.Col >= len(g[0]) {
+			n = &coordinates.Coordinate{Row: n.Row, Col: 0}
+			isStart = true
 		}
-		col := n.Col % len(g[0])
-		if col < 0 {
-			col = len(g[0]) + col
-		}
-		if g[row][col] == '#' {
+
+		if g[n.Row][n.Col] == '#' {
 			continue
 		}
+
+		if isStart {
+			starts = append(starts, n)
+			continue
+		}
+
 		next = append(next, n)
 	}
-	return next
+	return next, starts
 }
 
 func partTwo(puzzleFile string, steps int) {
@@ -134,35 +155,63 @@ func partTwo(puzzleFile string, steps int) {
 		}
 	}
 
-	curs := []*Step{{start, 0}}
-	seen := map[string]bool{}
-	finalPlots := map[string]bool{}
-	for len(curs) > 0 {
+	starts := []*Step{{start, 0}}
+	startsSeen := map[string]int{starts[0].Hash(): 1}
+	startsToPlots := map[string]int{}
+	for len(starts) > 0 {
 		/**
-		we'll grab next positions and potentially add them to curs to step from
-		all positions can be final by
+		for every start, we'll run it through, collecting new starts we haven't seen
+		or incrementing their count
 		**/
-		next := curs[0]
-		curs = curs[1:]
-		nextStepNumber := next.StepNumber + 1
-		if nextStepNumber > steps {
-			continue
-		}
-		for _, n := range NextInfinitePositions(g, next.Pos) {
-			if _, ok := seen[n.String()]; !ok {
-				seen[n.String()] = true
-				curs = append(curs, &Step{n, nextStepNumber})
+		s := starts[0]
+		starts = starts[1:]
+
+		seen := map[string]bool{}
+		finalPlots := map[string]bool{}
+		curs := []*Step{s}
+
+		for len(curs) > 0 {
+			next := curs[0]
+			curs = curs[1:]
+			nextStepNumber := next.StepNumber + 1
+			if nextStepNumber > steps {
+				continue
 			}
-			// Can only enter a plot at the end if we're at the step count or have an even number of steps left
-			if nextStepNumber == steps || (steps-nextStepNumber)%2 == 0 {
-				finalPlots[n.String()] = true
+			nexts, newStarts := NextInfinitePositions(g, next.Pos)
+			for _, n := range nexts {
+				if _, ok := seen[n.String()]; !ok {
+					seen[n.String()] = true
+					curs = append(curs, &Step{n, nextStepNumber})
+				}
+				// Can only enter a plot at the end if we're at the step count or have an even number of steps left
+				if nextStepNumber == steps || (steps-nextStepNumber)%2 == 0 {
+					finalPlots[n.String()] = true
+				}
+			}
+
+			for _, n := range newStarts {
+				nextStep := &Step{n, nextStepNumber}
+				if _, ok := startsSeen[nextStep.Hash()]; !ok {
+					startsSeen[nextStep.Hash()] = 1
+					starts = append(starts, nextStep)
+					slog.Debug("Adding new start", "start", nextStep)
+				} else {
+					startsSeen[nextStep.Hash()]++
+				}
 			}
 		}
+
+		startsToPlots[s.Hash()] = len(finalPlots)
 	}
 
-	PrintGrid(g, finalPlots)
+	slog.Debug("Finished simulating", "starts seen", startsSeen, "starts to plots", startsToPlots)
 
-	slog.Info("Day TwentyOne part two", "reachable plots", len(finalPlots))
+	totalPlots := 0
+	for start, plots := range startsToPlots {
+		totalPlots += plots * startsSeen[start]
+	}
+
+	slog.Info("Day TwentyOne part two", "steps", steps, "reachable plots", totalPlots)
 }
 
 var Cmd = &cobra.Command{
