@@ -3,7 +3,6 @@ package dayTwentyOne
 import (
 	"adventofcode/cmd/coordinates"
 	"adventofcode/cmd/fileReader"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -29,10 +28,6 @@ func NextPositions(g []string, c *coordinates.Coordinate) []*coordinates.Coordin
 type Step struct {
 	Pos        *coordinates.Coordinate
 	StepNumber int
-}
-
-func (s *Step) Hash() string {
-	return fmt.Sprintf("%s-%d", s.Pos.String(), s.StepNumber%2)
 }
 
 func ReachablePlots(g []string, start *coordinates.Coordinate, steps int) int {
@@ -105,42 +100,39 @@ func partOne(puzzleFile string, stepCount int) {
 	slog.Info("Day TwentyOne part one", "reachable plots", plots)
 }
 
-// Returns next valid coordinates and any coordinates that would leave the current grid
-func NextInfinitePositions(g []string, c *coordinates.Coordinate) ([]*coordinates.Coordinate, []*coordinates.Coordinate) {
+func NextInfinitePositions(g []string, c *coordinates.Coordinate) []*coordinates.Coordinate {
 	next := []*coordinates.Coordinate{}
-	starts := []*coordinates.Coordinate{}
 	for _, m := range coordinates.GridMoves() {
 		n := c.Move(m)
-
-		isStart := false
-		if n.Row < 0 {
-			n = &coordinates.Coordinate{Row: len(g) - 1, Col: n.Col}
-			isStart = true
-		} else if n.Row >= len(g) {
-			n = &coordinates.Coordinate{Row: 0, Col: n.Col}
-			isStart = true
-		} else if n.Col < 0 {
-			n = &coordinates.Coordinate{Row: n.Row, Col: len(g[0]) - 1}
-			isStart = true
-		} else if n.Col >= len(g[0]) {
-			n = &coordinates.Coordinate{Row: n.Row, Col: 0}
-			isStart = true
+		row := n.Row % len(g)
+		if row < 0 {
+			row = len(g) + row
 		}
-
-		if g[n.Row][n.Col] == '#' {
+		col := n.Col % len(g[0])
+		if col < 0 {
+			col = len(g[0]) + col
+		}
+		if g[row][col] == '#' {
 			continue
 		}
-
-		if isStart {
-			starts = append(starts, n)
-			continue
-		}
-
 		next = append(next, n)
 	}
-	return next, starts
+	return next
 }
 
+/*
+*
+Okay, so this is correct but too slow. I spent several commits (look at the history) attempting
+various caching and speeding up techniques, but [Reddit](https://www.reddit.com/r/adventofcode/comments/18orn0s/2023_day_21_part_2_links_between_days/)
+has some great points about looking at this as a _polynomial_. You can even use the day nine solution
+to extrapolate to an answer. The "mathy" trick is to find the polynomial. Lagrange interpolation is a good
+fit for this.
+
+Using [this site](https://www.dcode.fr/lagrange-interpolating-polynomial) we can find the polynomial.
+I ran mine on several points and got the following polynomial:
+14888*x^2/17161 + 26154*x/17161 − 213738/17161
+*
+*/
 func partTwo(puzzleFile string, steps int) {
 	slog.Info("Day TwentyOne part two", "puzzle file", puzzleFile)
 	g := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
@@ -155,63 +147,35 @@ func partTwo(puzzleFile string, steps int) {
 		}
 	}
 
-	starts := []*Step{{start, 0}}
-	startsSeen := map[string]int{starts[0].Hash(): 1}
-	startsToPlots := map[string]int{}
-	for len(starts) > 0 {
+	curs := []*Step{{start, 0}}
+	seen := map[string]bool{}
+	finalPlots := map[string]bool{}
+	for len(curs) > 0 {
 		/**
-		for every start, we'll run it through, collecting new starts we haven't seen
-		or incrementing their count
+		we'll grab next positions and potentially add them to curs to step from
+		all positions can be final by
 		**/
-		s := starts[0]
-		starts = starts[1:]
-
-		seen := map[string]bool{}
-		finalPlots := map[string]bool{}
-		curs := []*Step{s}
-
-		for len(curs) > 0 {
-			next := curs[0]
-			curs = curs[1:]
-			nextStepNumber := next.StepNumber + 1
-			if nextStepNumber > steps {
-				continue
+		next := curs[0]
+		curs = curs[1:]
+		nextStepNumber := next.StepNumber + 1
+		if nextStepNumber > steps {
+			continue
+		}
+		for _, n := range NextInfinitePositions(g, next.Pos) {
+			if _, ok := seen[n.String()]; !ok {
+				seen[n.String()] = true
+				curs = append(curs, &Step{n, nextStepNumber})
 			}
-			nexts, newStarts := NextInfinitePositions(g, next.Pos)
-			for _, n := range nexts {
-				if _, ok := seen[n.String()]; !ok {
-					seen[n.String()] = true
-					curs = append(curs, &Step{n, nextStepNumber})
-				}
-				// Can only enter a plot at the end if we're at the step count or have an even number of steps left
-				if nextStepNumber == steps || (steps-nextStepNumber)%2 == 0 {
-					finalPlots[n.String()] = true
-				}
-			}
-
-			for _, n := range newStarts {
-				nextStep := &Step{n, nextStepNumber}
-				if _, ok := startsSeen[nextStep.Hash()]; !ok {
-					startsSeen[nextStep.Hash()] = 1
-					starts = append(starts, nextStep)
-					slog.Debug("Adding new start", "start", nextStep)
-				} else {
-					startsSeen[nextStep.Hash()]++
-				}
+			// Can only enter a plot at the end if we're at the step count or have an even number of steps left
+			if nextStepNumber == steps || (steps-nextStepNumber)%2 == 0 {
+				finalPlots[n.String()] = true
 			}
 		}
-
-		startsToPlots[s.Hash()] = len(finalPlots)
 	}
 
-	slog.Debug("Finished simulating", "starts seen", startsSeen, "starts to plots", startsToPlots)
+	PrintGrid(g, finalPlots)
 
-	totalPlots := 0
-	for start, plots := range startsToPlots {
-		totalPlots += plots * startsSeen[start]
-	}
-
-	slog.Info("Day TwentyOne part two", "steps", steps, "reachable plots", totalPlots)
+	slog.Info("Day TwentyOne part two", "reachable plots", len(finalPlots))
 }
 
 var Cmd = &cobra.Command{
