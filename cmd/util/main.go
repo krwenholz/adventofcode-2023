@@ -13,3 +13,10 @@ func Max(a, b int) int {
 	}
 	return b
 }
+
+func Order(a, b int) (int, int) {
+	if a > b {
+		return b, a
+	}
+	return a, b
+}
