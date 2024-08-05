@@ -152,10 +152,10 @@ func applyGravity(bricks []*Brick) []*Brick {
 			b.Coords[1].Z--
 		}
 
-		if _, ok := topOfBricksAtRest[b.BottomZ()]; !ok {
-			topOfBricksAtRest[b.BottomZ()] = []*Brick{}
+		if _, ok := topOfBricksAtRest[b.TopZ()]; !ok {
+			topOfBricksAtRest[b.TopZ()] = []*Brick{}
 		}
-		topOfBricksAtRest[b.BottomZ()] = append(topOfBricksAtRest[b.BottomZ()], b)
+		topOfBricksAtRest[b.TopZ()] = append(topOfBricksAtRest[b.TopZ()], b)
 
 		/**
 		for dec := i - 1; dec >= 0; dec-- {
@@ -218,6 +218,7 @@ wrong answers:
 - 439
 - 452
 - 460
+- 407??
 */
 func partOne(puzzleFile string) {
 	slog.Info("Day TwentyTwo part one", "puzzle file", puzzleFile)
@@ -226,9 +227,6 @@ func partOne(puzzleFile string) {
 	bricks = applyGravity(bricks)
 	bricks = findSupports(bricks)
 
-	// collapse by minimizing the z values of any given brick
-	// the next lowest supporting brick is as far as we can fall
-	// we iterate _upwards_ to lower the lowest blocks first
 	bricksMapped := map[string]*Brick{}
 	for _, b := range bricks {
 		bricksMapped[b.Id] = b
