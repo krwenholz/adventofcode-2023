@@ -5,6 +5,7 @@ import (
 	"adventofcode/cmd/util"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
@@ -24,14 +25,14 @@ func (c *Coordinate) String() string {
 }
 
 type Brick struct {
-	Coords           []*Coordinate `@@ Tilde @@`
-	SupportingBricks []string
-	SupportsBricks   []string
-	Id               string
+	Coords      []*Coordinate `@@ Tilde @@`
+	SupportedBy []string
+	Supporting  []string
+	Id          string
 }
 
 func (b *Brick) String() string {
-	return fmt.Sprintf("%s(%v): supported by: %v supports: %v", b.Id, b.Coords, b.SupportingBricks, b.SupportsBricks)
+	return fmt.Sprintf("%s(%v): supported by: %v supports: %v", b.Id, b.Coords, b.SupportedBy, b.Supporting)
 }
 
 func (b *Brick) FinishInit(id int) {
@@ -40,26 +41,16 @@ func (b *Brick) FinishInit(id int) {
 		b.Id += string('A' + (id % 26))
 		id -= 26
 	}
-	b.SupportingBricks = []string{}
-	b.SupportsBricks = []string{}
-	b.Order()
-}
-
-func (b *Brick) Order() {
-	c1 := b.Coords[0]
-	c2 := b.Coords[1]
-	if c1.Z < c2.Z {
-		b.Coords[0] = c2
-		b.Coords[1] = c1
-	}
+	b.SupportedBy = []string{}
+	b.Supporting = []string{}
 }
 
 func (b *Brick) TopZ() int {
-	return b.Coords[0].Z
+	return b.Coords[1].Z
 }
 
 func (b *Brick) BottomZ() int {
-	return b.Coords[1].Z
+	return b.Coords[0].Z
 }
 
 func (b *Brick) Fall(deltaZ int) {
@@ -118,6 +109,11 @@ func ParseBricks(puzzleFile string) []*Brick {
 	)
 	bricks := []*Brick{}
 
+	hasAnswerLine := len(lines[0]) < 4
+	if hasAnswerLine {
+		slog.Info("Expected answer", "count", lines[0])
+		lines = lines[1:]
+	}
 	for i, l := range lines {
 		b, err := brickParser.ParseBytes("", []byte(l))
 		b.FinishInit(i)
@@ -135,54 +131,114 @@ func ParseBricks(puzzleFile string) []*Brick {
 	return bricks
 }
 
+func applyGravity(bricks []*Brick) []*Brick {
+	topOfBricksAtRest := map[int][]*Brick{}
+	for _, b := range bricks {
+		supported := false
+		for b.BottomZ() > 1 {
+			if bs, ok := topOfBricksAtRest[b.BottomZ()-1]; ok {
+				for _, b2 := range bs {
+					if b2.Supports(b) {
+						supported = true
+						break
+					}
+				}
+			}
+			if supported {
+				break
+			}
+
+			b.Coords[0].Z--
+			b.Coords[1].Z--
+		}
+
+		if _, ok := topOfBricksAtRest[b.BottomZ()]; !ok {
+			topOfBricksAtRest[b.BottomZ()] = []*Brick{}
+		}
+		topOfBricksAtRest[b.BottomZ()] = append(topOfBricksAtRest[b.BottomZ()], b)
+
+		/**
+		for dec := i - 1; dec >= 0; dec-- {
+			b2 := bricks[j]
+			if b2.Supports(b) {
+				unsupported = false
+
+				slog.Debug("Falling", "b", b, "b2", b2)
+				b.Fall(b.BottomZ() - b2.TopZ() - 1)
+
+				break
+			}
+		}
+
+		// unsupported bricks fall to the ground
+		if unsupported {
+			slog.Debug("Falling to ground", "b", b)
+			b.Fall(b.BottomZ() - 1)
+		}
+			**/
+	}
+
+	slices.SortFunc[[]*Brick](bricks, func(a, b *Brick) int {
+		return a.BottomZ() - b.BottomZ()
+	})
+
+	return bricks
+}
+
+func findSupports(bricks []*Brick) []*Brick {
+	for i, b := range bricks {
+		for j := i - 1; j >= 0; j-- {
+			b2 := bricks[j]
+			if b2.Supports(b) {
+				if b.BottomZ()-b2.TopZ() > 1 {
+					// Although we're sorted, we can't break because tall blocks may actually be further down
+					// the list
+					continue
+				}
+
+				b.SupportedBy = append(b.SupportedBy, b2.Id)
+				b2.Supporting = append(b2.Supporting, b.Id)
+
+				// We only care about being supported by _more_ than one brick, so exit early
+				if len(b.SupportedBy) == 2 {
+					break
+				}
+			}
+
+		}
+	}
+
+	return bricks
+}
+
 /*
-todo: 399 was too low and 423 was too high
+wrong answers:
+- 399
+- 423
+- 439
+- 452
+- 460
 */
 func partOne(puzzleFile string) {
 	slog.Info("Day TwentyTwo part one", "puzzle file", puzzleFile)
 
 	bricks := ParseBricks(puzzleFile)
+	bricks = applyGravity(bricks)
+	bricks = findSupports(bricks)
 
 	// collapse by minimizing the z values of any given brick
 	// the next lowest supporting brick is as far as we can fall
 	// we iterate _upwards_ to lower the lowest blocks first
 	bricksMapped := map[string]*Brick{}
-	for i, b := range bricks {
-		// first find any supporting brick
-		for j := i - 1; j >= 0; j-- {
-			b2 := bricks[j]
-			if b2.Supports(b) {
-				// Only consider bricks that are at most 1 unit apart after the first support
-				if len(b.SupportingBricks) != 0 && b.BottomZ()-b2.TopZ() > 1 {
-					break
-				}
-
-				b.SupportingBricks = append(b.SupportingBricks, b2.Id)
-				b2.SupportsBricks = append(b2.SupportsBricks, b.Id)
-				if len(b.SupportingBricks) == 2 {
-					break
-				}
-				if len(b.SupportingBricks) == 1 {
-					slog.Debug("Falling", "b", b, "b2", b2)
-					b.Fall(b.BottomZ() - b2.TopZ() - 1)
-				}
-			}
-
-		}
-
-		// unsupported bricks fall to the ground
-		if len(b.SupportingBricks) == 0 {
-			slog.Debug("Falling to ground", "b", b)
-			b.Fall(b.BottomZ() - 1)
-		}
+	for _, b := range bricks {
 		bricksMapped[b.Id] = b
 	}
 
 	disintegrable := []string{}
 	for _, b := range bricks {
 		canDisintegrate := true
-		for _, supportedId := range b.SupportsBricks {
-			if len(bricksMapped[supportedId].SupportingBricks) != 2 {
+		for _, supportedId := range b.Supporting {
+			if len(bricksMapped[supportedId].SupportedBy) != 2 {
 				canDisintegrate = false
 				break
 			}
@@ -193,8 +249,19 @@ func partOne(puzzleFile string) {
 		}
 	}
 
-	slog.Debug("Bricks", "bricks", bricks, "disintegrable", disintegrable)
+	printBricks(bricks)
+	slog.Debug("Disintegrable", "disintegrable", disintegrable)
 	slog.Info("Disintegrable", "disintegrable", len(disintegrable))
+}
+
+func printBricks(bricks []*Brick) {
+	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
+		return
+	}
+	for i := len(bricks) - 1; i >= 0; i-- {
+		b := bricks[i]
+		fmt.Println(b)
+	}
 }
 
 func partTwo(puzzleFile string) {
