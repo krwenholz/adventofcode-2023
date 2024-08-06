@@ -5,6 +5,7 @@ import (
 	"adventofcode/cmd/util"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -185,7 +186,7 @@ func applyGravity(bricks []*Brick) []*Brick {
 	return bricks
 }
 
-func findSupports(bricks []*Brick) []*Brick {
+func findSupports(bricks []*Brick, maxSupportsWeCareAbout int) []*Brick {
 	for i, b := range bricks {
 		for j := i - 1; j >= 0; j-- {
 			b2 := bricks[j]
@@ -200,7 +201,8 @@ func findSupports(bricks []*Brick) []*Brick {
 				b2.Supporting = append(b2.Supporting, b.Id)
 
 				// We only care about being supported by _more_ than one brick, so exit early
-				if len(b.SupportedBy) == 2 {
+				if len(b.SupportedBy) >= maxSupportsWeCareAbout {
+					slog.Debug("hit max supports", "b", b.Id, "maxSupports", maxSupportsWeCareAbout)
 					break
 				}
 			}
@@ -225,7 +227,7 @@ func partOne(puzzleFile string) {
 
 	bricks := ParseBricks(puzzleFile)
 	bricks = applyGravity(bricks)
-	bricks = findSupports(bricks)
+	bricks = findSupports(bricks, 2)
 
 	bricksMapped := map[string]*Brick{}
 	for _, b := range bricks {
@@ -253,17 +255,49 @@ func partOne(puzzleFile string) {
 }
 
 func printBricks(bricks []*Brick) {
-	if strings.ToLower(os.Getenv("LOG_LEVEL")) != "debug" {
-		return
-	}
-	for i := len(bricks) - 1; i >= 0; i-- {
-		b := bricks[i]
-		fmt.Println(b)
-	}
+	os.WriteFile("/tmp/bricks_debug.txt", []byte(fmt.Sprintf("%v", bricks)), 0644)
 }
 
 func partTwo(puzzleFile string) {
 	slog.Info("Day TwentyTwo part two", "puzzle file", puzzleFile)
+
+	bricks := ParseBricks(puzzleFile)
+	bricks = applyGravity(bricks)
+	bricks = findSupports(bricks, math.MaxInt)
+
+	reactionSum := 0
+	for i, b := range bricks {
+		removed := map[string]bool{b.Id: true}
+
+		for _, b2 := range bricks[i:] {
+			if b2.Coords[0].Z == 1 {
+				// Skip ground bricks
+				continue
+			}
+			supportsRemoved := 0
+			for _, supportingId := range b2.SupportedBy {
+				if _, ok := removed[supportingId]; ok {
+					supportsRemoved++
+				}
+			}
+
+			if supportsRemoved == len(b2.SupportedBy) {
+				removed[b2.Id] = true
+			}
+		}
+
+		slog.Debug("Will collapse", "b", b.Id, "willCollapse", removed)
+		reactionSum += len(removed) - 1 // account for seeding with "self"
+	}
+
+	printBricks(bricks)
+	/**
+	Attempts with wrong answers:
+	- 95
+	- 67702 // too high
+	- 67684 // too high
+	**/
+	slog.Info("Reaction value", "val", reactionSum)
 }
 
 var Cmd = &cobra.Command{
