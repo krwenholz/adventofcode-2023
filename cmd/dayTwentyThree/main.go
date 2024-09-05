@@ -6,13 +6,14 @@ import (
 	"container/heap"
 	"fmt"
 	"log/slog"
-	"math"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+var counter = 0
 
 type Coordinate struct {
 	Row int
@@ -92,9 +93,6 @@ func (c *Cell) Next(dir *Direction, dest *Coordinate, grid [][]string, validPosi
 	}
 
 	// NOTE: the values here are _negative_, because that's awesome and gets us a longest path
-	// Manhattan distance is our h estimate
-	//h := -(util.Abs(dest.Row-newCoords.Row) + util.Abs(dest.Col-newCoords.Col))
-	// Use all cells, because we could visit each one, and bump with the manhattan distance
 	h := len(c.prevs) - validPositions - (util.Abs(dest.Row-newCoords.Row) + util.Abs(dest.Col-newCoords.Col))
 	// g is just distance traveled
 	g := c.g - 1
@@ -169,26 +167,35 @@ func AStarSearch(grid [][]string,
 	// Track the best paths
 	cameFrom := map[string]*Cell{}
 
-	gScore := make([][]int, len(grid))
-	for i := 0; i < len(grid); i++ {
-		gScore[i] = make([]int, len(grid[0]))
-		for j := 0; j < len(grid[0]); j++ {
-			gScore[i][j] = int(math.Inf(1))
-		}
-	}
-	gScore[src.Row][src.Col] = 0
-
 	// Initialize the start cell details
 	start := &Cell{src, map[string]bool{}, 0, 0, 0}
 	// Initialize the open list (cells to be visited) with the start cell
 	openSet := &CellHeap{start}
 
+	// A helpful debug cell set
+	dbgCells := map[string][]*Cell{}
+
 	// Main loop of A* search algorithm
 	for len(*openSet) > 0 {
 		current := heap.Pop(openSet).(*Cell)
+		if current.coords.Equals(&Coordinate{6, 3}) || current.coords.Equals(&Coordinate{5, 4}) {
+			if dbgCells[current.coords.String()] == nil {
+				dbgCells[current.coords.String()] = []*Cell{}
+			}
+			dbgCells[current.coords.String()] = append(dbgCells[current.coords.String()], current)
+		}
 
 		if finished(current, dest) {
 			slog.Debug("found the destination!", "cell", current, "open list", *openSet)
+			dbgCellsOut := []byte{}
+			for k, v := range dbgCells {
+				dbgCellsOut = append(dbgCellsOut, []byte(fmt.Sprintf("%s\n", k))...)
+				for _, c := range v {
+					dbgCellsOut = append(dbgCellsOut, []byte(fmt.Sprintf("\t%s\n", c))...)
+				}
+				dbgCellsOut = append(dbgCellsOut, []byte("\n")...)
+			}
+			os.WriteFile("/tmp/dbgCells.txt", dbgCellsOut, 0644)
 			return ReconstructPath(cameFrom, current), current
 		}
 
@@ -200,11 +207,6 @@ func AStarSearch(grid [][]string,
 			if err != nil {
 				slog.Debug("invalid state", "cell", current, "dir", dir, "error", err)
 				continue
-			}
-
-			if neighbor.g < gScore[neighbor.coords.Row][neighbor.coords.Col] {
-				// record our visual g scores
-				gScore[neighbor.coords.Row][neighbor.coords.Col] = neighbor.g
 			}
 
 			if prev, ok := seen[neighbor.CellState()]; !ok || neighbor.g < prev.g {
@@ -249,7 +251,7 @@ func partOne(puzzleFile string) {
 
 	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
 	expected := rows[0]
-	rows = rows[1:]
+	rows = rows[2:]
 	grid := make([][]string, len(rows))
 	for i, row := range rows {
 		grid[i] = make([]string, len(row))
@@ -272,6 +274,35 @@ func partOne(puzzleFile string) {
 
 func partTwo(puzzleFile string) {
 	slog.Info("Day TwentyThree part two", "puzzle file", puzzleFile)
+	// TODO: I think I just need to rewrite this to use a DFS with a couple optimizations. See the Reddit thread:
+	// https://www.reddit.com/r/adventofcode/comments/18rak3k/2023_rust_solving_everything_under_1_second/
+
+	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
+	expected := rows[1]
+	rows = rows[2:]
+
+	grid := make([][]string, len(rows))
+	for i, row := range rows {
+		grid[i] = make([]string, len(row))
+		for j, pos := range row {
+			if pos == '.' || pos == '#' {
+				grid[i][j] = string(pos)
+			} else {
+				grid[i][j] = "."
+			}
+		}
+	}
+
+	start := findOnlySlot(grid, 0)
+	end := findOnlySlot(grid, len(grid)-1)
+
+	path, finalCell := AStarSearch(grid, start, end, func(c *Cell, d *Coordinate) bool {
+		return c.coords.Equals(d)
+	})
+
+	PrintPath(path, rows)
+
+	slog.Info("Day TwentyThree part one", "expected", expected, "distance", -finalCell.g)
 }
 
 var Cmd = &cobra.Command{
