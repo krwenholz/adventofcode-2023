@@ -13,8 +13,6 @@
   // run arguments passed to docker
   "runArgs": ["--security-opt", "label=disable"],
 
-  "mounts": ["source=krwenholz-adventofcode-2023_nix,target=/nix,type=volume"],
-
   "containerEnv": {
     // extensions to preload before other extensions
     //"PRELOAD_EXTENSIONS": "arrterian.nix-env-selector"
@@ -43,8 +41,8 @@
   },
 
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  "forwardPorts": []
+  "forwardPorts": [],
 
   // Use 'postCreateCommand' to run commands after the container is created.
-  //"postCreateCommand": "nix run home-manager/release-24.05 -- switch --flake "github:krwenholz/dotfiles#$(whoami)@$(uname -m)""
+  "postCreateCommand": "nix run home-manager/release-24.05 -- switch --flake \"github:krwenholz/dotfiles#$(whoami)@$(uname -m)\""
 }
