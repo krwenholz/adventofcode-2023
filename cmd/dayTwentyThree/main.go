@@ -386,6 +386,55 @@ func graphify(grid [][]string, nodes map[string]*Node) {
 			}
 		}
 	}
+
+	passThroughNodes := 0
+	perimiterNodes := 0
+	for _, node := range nodes {
+		if len(node.Edges) == 2 {
+			passThroughNodes++
+			// We're a pass-through, let's connect
+			edgeOne := node.Edges[0]
+			edgeTwo := node.Edges[1]
+
+			// Connect the two edges
+			edgeOne.Node.Edges = append(edgeOne.Node.Edges, &Edge{edgeOne.Dist + edgeTwo.Dist, edgeTwo.Node})
+			edgeTwo.Node.Edges = append(edgeTwo.Node.Edges, &Edge{edgeOne.Dist + edgeTwo.Dist, edgeOne.Node})
+			// Now remove ourselves
+			edges := []*Edge{}
+			for _, edge := range edgeOne.Node.Edges {
+				if edge.Node.Row != node.Row || edge.Node.Col != node.Col {
+					edges = append(edges, edge)
+				}
+			}
+			edgeOne.Node.Edges = edges
+			edges = []*Edge{}
+			for _, edge := range edgeTwo.Node.Edges {
+				if edge.Node.Row != node.Row || edge.Node.Col != node.Col {
+					edges = append(edges, edge)
+				}
+			}
+			edgeTwo.Node.Edges = edges
+
+			node.Edges = []*Edge{}
+		}
+
+		// Now clean up the edge nodes to be "directed"
+		// https://www.reddit.com/r/adventofcode/comments/18oy4pc/comment/kfyvp2g/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button
+		//if len(node.Edges) <= 3 && len(node.Edges) > 0 {
+		//  perimiterNodes++
+		//  finalEdges := []*Edge{}
+		//  for _, edge := range node.Edges {
+		//      if edge.Node.Row >= node.Row && edge.Node.Col >= node.Col {
+		//          finalEdges = append(finalEdges, edge)
+		//      }
+		//  }
+		//  //slog.Debug("cleaning up edges", "node", node.DbgString())
+		//  node.Edges = finalEdges
+		//  //slog.Debug("cleaned", "node", node.DbgString())
+		//}
+	}
+
+	slog.Debug("Trimming stats", "passThroughNodes", passThroughNodes, "perimiterNodes", perimiterNodes)
 }
 
 func DFS(node *Node, dst *Coordinate, visited string) (int, []*Node) {
@@ -398,19 +447,21 @@ func DFS(node *Node, dst *Coordinate, visited string) (int, []*Node) {
 	bestDistance := 0
 	bestPath := []*Node{}
 	for _, edge := range node.Edges {
-		if !strings.Contains(visited, edge.Node.String()) {
-			newDist, newPath := DFS(edge.Node, dst, visited)
-			newDist += edge.Dist
-			if len(newPath) == 0 {
-				// Never reached the end
-				continue
-			}
+		if strings.Contains(visited, edge.Node.String()) {
+			continue
+		}
 
-			lastNode := newPath[len(newPath)-1]
-			if lastNode.Row == dst.Row && lastNode.Col == dst.Col && newDist > bestDistance {
-				bestDistance = newDist
-				bestPath = append([]*Node{node}, newPath...)
-			}
+		newDist, newPath := DFS(edge.Node, dst, visited)
+		newDist += edge.Dist
+		if len(newPath) == 0 {
+			// Never reached the end
+			continue
+		}
+
+		lastNode := newPath[len(newPath)-1]
+		if lastNode.Row == dst.Row && lastNode.Col == dst.Col && newDist > bestDistance {
+			bestDistance = newDist
+			bestPath = append([]*Node{node}, newPath...)
 		}
 	}
 
