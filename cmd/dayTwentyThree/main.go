@@ -92,7 +92,8 @@ func (c *Cell) Next(dir *Direction, dest *Coordinate, grid [][]string, validPosi
 		}
 	}
 
-	// NOTE: the values here are _negative_, because that's awesome and gets us a longest path
+	// NOTE: the values here are _negative_, because that's awesome and gets us
+	// a longest path
 	h := len(c.prevs) - validPositions - (util.Abs(dest.Row-newCoords.Row) + util.Abs(dest.Col-newCoords.Col))
 	// g is just distance traveled
 	g := c.g - 1
@@ -210,7 +211,8 @@ func AStarSearch(grid [][]string,
 			}
 
 			if prev, ok := seen[neighbor.CellState()]; !ok || neighbor.g < prev.g {
-				// This path to neighbor is better than any previous one. Record it!
+				// This path to neighbor is better than any previous one. Record
+				// it!
 				slog.Debug("found new best path!", "cell", neighbor, "open list", len(*openSet))
 				cameFrom[neighbor.CellState()] = current
 				seen[neighbor.CellState()] = neighbor
@@ -272,10 +274,156 @@ func partOne(puzzleFile string) {
 	slog.Info("Day TwentyThree part one", "expected", expected, "distance", -finalCell.g)
 }
 
+type Edge struct {
+	Dist int
+	Node *Node
+}
+
+type Node struct {
+	Row   int
+	Col   int
+	Edges []*Edge
+}
+
+func (n *Node) String() string {
+	return fmt.Sprintf("(%d,%d)", n.Row, n.Col)
+}
+
+func (n *Node) DbgString() string {
+	out := fmt.Sprintf("(%d,%d) -> [", n.Row, n.Col)
+	for _, e := range n.Edges {
+		out += fmt.Sprintf("%d (%v) ", e.Dist, e.Node)
+	}
+	out += "]"
+	return out
+}
+
+func isNode(row, col int, grid [][]string) bool {
+	if grid[row][col] == "#" {
+		return false
+	}
+	// First and last row only have one non-wall
+	if row == 0 || row == len(grid)-1 {
+		return true
+	}
+
+	for _, ds := range [][]*Direction{
+		// up and right
+		{{-1, 0}, {0, 1}},
+		// right and down
+		{{0, 1}, {1, 0}},
+		// down and left
+		{{1, 0}, {0, -1}},
+		// left and up
+		{{0, -1}, {-1, 0}},
+	} {
+		dOne := ds[0]
+		dTwo := ds[1]
+		if getPos(row+dOne.Row, col+dOne.Col, grid) == "." && getPos(row+dTwo.Row, col+dTwo.Col, grid) == "." {
+			return true
+		}
+	}
+	// Other rows need three neighbors
+	return false
+}
+
+func getPos(row, col int, grid [][]string) string {
+	if row < 0 || row >= len(grid) || col < 0 || col >= len(grid[0]) {
+		return ""
+	}
+	return grid[row][col]
+}
+
+func graphify(grid [][]string, nodes map[string]*Node) {
+	for i, row := range grid {
+		for j := range row {
+			if !isNode(i, j, grid) {
+				continue
+			}
+
+			// Fetch or create the node for this position (it's already been
+			// created if it's someone's neighbor)
+			node, _ := nodes[fmt.Sprintf("(%d,%d)", i, j)]
+			if node == nil {
+				node = &Node{i, j, []*Edge{}}
+				nodes[node.String()] = node
+			}
+
+			// now traverse down and right to find the neighbors at the end of
+			// paths
+			for _, dir := range []*Direction{
+				{1, 0},
+				{0, 1},
+			} {
+				dist := 0
+				newRow := i + dir.Row
+				newCol := j + dir.Col
+				for newRow < len(grid) && newCol < len(grid[0]) {
+					// We hit a wall! Stop traversing.
+					if grid[newRow][newCol] == "#" {
+						break
+					}
+
+					dist++
+
+					// It's a node!
+					if isNode(newRow, newCol, grid) {
+						if neighbor, ok := nodes[fmt.Sprintf("(%d,%d)", newRow, newCol)]; ok {
+							node.Edges = append(node.Edges, &Edge{dist, neighbor})
+							neighbor.Edges = append(neighbor.Edges, &Edge{dist, node})
+							break
+						} else {
+							neighbor := &Node{newRow, newCol, []*Edge{}}
+							nodes[neighbor.String()] = neighbor
+							node.Edges = append(node.Edges, &Edge{dist, neighbor})
+							neighbor.Edges = append(neighbor.Edges, &Edge{dist, node})
+							break
+						}
+					}
+					newRow += dir.Row
+					newCol += dir.Col
+				}
+			}
+		}
+	}
+}
+
+func DFS(node *Node, dst *Coordinate, visited string, pathSoFar []*Node, distSoFar int) (int, []*Node) {
+	visited += node.String()
+
+	if node.Row == dst.Row && node.Col == dst.Col {
+		return distSoFar, append(pathSoFar, node)
+	}
+
+	furthestDistance := distSoFar
+	furthestPath := pathSoFar
+	for _, edge := range node.Edges {
+		if !strings.Contains(visited, edge.Node.String()) {
+			newDist, newPath := DFS(edge.Node, dst, visited, append(pathSoFar, node), distSoFar+edge.Dist)
+			lastNode := newPath[len(newPath)-1]
+			if lastNode.Row == dst.Row && lastNode.Col == dst.Col {
+				if newDist > furthestDistance {
+					furthestDistance = newDist
+					furthestPath = newPath
+				}
+			}
+		}
+	}
+
+	return furthestDistance, furthestPath
+}
+
+func PrintGraph(path []*Node, grid []string) {
+	for _, n := range path {
+		row := n.Row
+		col := n.Col
+		grid[row] = grid[row][:col] + "X" + grid[row][col+1:]
+	}
+	os.WriteFile("/tmp/grid.txt", []byte(strings.Join(grid, "\n")), 0644)
+}
+
 func partTwo(puzzleFile string) {
 	slog.Info("Day TwentyThree part two", "puzzle file", puzzleFile)
-	// TODO: I think I just need to rewrite this to use a DFS with a couple optimizations. See the Reddit thread:
-	// https://www.reddit.com/r/adventofcode/comments/18rak3k/2023_rust_solving_everything_under_1_second/
 
 	rows := strings.Split(fileReader.ReadFileContents(puzzleFile), "\n")
 	expected := rows[1]
@@ -294,15 +442,16 @@ func partTwo(puzzleFile string) {
 	}
 
 	start := findOnlySlot(grid, 0)
+	startNode := &Node{start.Row, start.Col, []*Edge{}}
+	nodes := map[string]*Node{start.String(): startNode}
+
+	graphify(grid, nodes)
 	end := findOnlySlot(grid, len(grid)-1)
+	distance, path := DFS(startNode, end, "", []*Node{}, 0)
 
-	path, finalCell := AStarSearch(grid, start, end, func(c *Cell, d *Coordinate) bool {
-		return c.coords.Equals(d)
-	})
+	PrintGraph(path, rows)
 
-	PrintPath(path, rows)
-
-	slog.Info("Day TwentyThree part one", "expected", expected, "distance", -finalCell.g)
+	slog.Info("Day TwentyThree part two", "expected", expected, "distance", distance, "path", path)
 }
 
 var Cmd = &cobra.Command{
