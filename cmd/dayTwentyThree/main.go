@@ -388,28 +388,51 @@ func graphify(grid [][]string, nodes map[string]*Node) {
 	}
 }
 
-func DFS(node *Node, dst *Coordinate, visited string, pathSoFar []*Node, distSoFar int) (int, []*Node) {
+type MemoizedVisit struct {
+	Dist int
+	Path []*Node
+}
+
+func DFS(node *Node, dst *Coordinate, visited string, memoizedVisits map[string]*MemoizedVisit) (int, []*Node) {
 	visited += node.String()
 
 	if node.Row == dst.Row && node.Col == dst.Col {
-		return distSoFar, append(pathSoFar, node)
+		return 0, []*Node{node}
 	}
 
-	furthestDistance := distSoFar
-	furthestPath := pathSoFar
+	distances := []int{}
+	paths := [][]*Node{}
 	for _, edge := range node.Edges {
 		if !strings.Contains(visited, edge.Node.String()) {
-			newDist, newPath := DFS(edge.Node, dst, visited, append(pathSoFar, node), distSoFar+edge.Dist)
+			//if memoizedVisits[edge.Node.String()] != nil {
+			//  distances = append(distances, memoizedVisits[edge.Node.String()].Dist)
+			//  paths = append(paths, memoizedVisits[edge.Node.String()].Path)
+			//  continue
+			//}
+			newDist, newPath := DFS(edge.Node, dst, visited, memoizedVisits)
+			if len(newPath) == 0 {
+				continue
+			}
+
 			lastNode := newPath[len(newPath)-1]
 			if lastNode.Row == dst.Row && lastNode.Col == dst.Col {
-				if newDist > furthestDistance {
-					furthestDistance = newDist
-					furthestPath = newPath
-				}
+				distances = append(distances, newDist+edge.Dist)
+				newPath = append([]*Node{node}, newPath...)
+				paths = append(paths, newPath)
 			}
 		}
 	}
 
+	furthestDistance := 0
+	furthestPath := []*Node{}
+	for i, dist := range distances {
+		if dist > furthestDistance {
+			furthestDistance = dist
+			furthestPath = paths[i]
+		}
+	}
+
+	memoizedVisits[node.String()] = &MemoizedVisit{furthestDistance, furthestPath}
 	return furthestDistance, furthestPath
 }
 
@@ -447,11 +470,11 @@ func partTwo(puzzleFile string) {
 
 	graphify(grid, nodes)
 	end := findOnlySlot(grid, len(grid)-1)
-	distance, path := DFS(startNode, end, "", []*Node{}, 0)
+	distance, path := DFS(startNode, end, "", map[string]*MemoizedVisit{})
 
 	PrintGraph(path, rows)
 
-	slog.Info("Day TwentyThree part two", "expected", expected, "distance", distance, "path", path)
+	slog.Info("Day TwentyThree part two", "expected", expected, "distance", distance)
 }
 
 var Cmd = &cobra.Command{
