@@ -388,52 +388,33 @@ func graphify(grid [][]string, nodes map[string]*Node) {
 	}
 }
 
-type MemoizedVisit struct {
-	Dist int
-	Path []*Node
-}
-
-func DFS(node *Node, dst *Coordinate, visited string, memoizedVisits map[string]*MemoizedVisit) (int, []*Node) {
-	visited += node.String()
-
+func DFS(node *Node, dst *Coordinate, visited string) (int, []*Node) {
 	if node.Row == dst.Row && node.Col == dst.Col {
 		return 0, []*Node{node}
 	}
 
-	distances := []int{}
-	paths := [][]*Node{}
+	visited += node.String()
+
+	bestDistance := 0
+	bestPath := []*Node{}
 	for _, edge := range node.Edges {
 		if !strings.Contains(visited, edge.Node.String()) {
-			//if memoizedVisits[edge.Node.String()] != nil {
-			//  distances = append(distances, memoizedVisits[edge.Node.String()].Dist)
-			//  paths = append(paths, memoizedVisits[edge.Node.String()].Path)
-			//  continue
-			//}
-			newDist, newPath := DFS(edge.Node, dst, visited, memoizedVisits)
+			newDist, newPath := DFS(edge.Node, dst, visited)
+			newDist += edge.Dist
 			if len(newPath) == 0 {
+				// Never reached the end
 				continue
 			}
 
 			lastNode := newPath[len(newPath)-1]
-			if lastNode.Row == dst.Row && lastNode.Col == dst.Col {
-				distances = append(distances, newDist+edge.Dist)
-				newPath = append([]*Node{node}, newPath...)
-				paths = append(paths, newPath)
+			if lastNode.Row == dst.Row && lastNode.Col == dst.Col && newDist > bestDistance {
+				bestDistance = newDist
+				bestPath = append([]*Node{node}, newPath...)
 			}
 		}
 	}
 
-	furthestDistance := 0
-	furthestPath := []*Node{}
-	for i, dist := range distances {
-		if dist > furthestDistance {
-			furthestDistance = dist
-			furthestPath = paths[i]
-		}
-	}
-
-	memoizedVisits[node.String()] = &MemoizedVisit{furthestDistance, furthestPath}
-	return furthestDistance, furthestPath
+	return bestDistance, bestPath
 }
 
 func PrintGraph(path []*Node, grid []string) {
@@ -470,7 +451,7 @@ func partTwo(puzzleFile string) {
 
 	graphify(grid, nodes)
 	end := findOnlySlot(grid, len(grid)-1)
-	distance, path := DFS(startNode, end, "", map[string]*MemoizedVisit{})
+	distance, path := DFS(startNode, end, "")
 
 	PrintGraph(path, rows)
 
