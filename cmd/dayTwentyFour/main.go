@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -41,11 +40,11 @@ func (h *Hailstone) String() string {
 	return fmt.Sprintf("Hailstone{x=%f, y=%f, z=%f, dx=%f, dy=%f, dz=%f}", h.X, h.Y, h.Z, h.DX, h.DY, h.DZ)
 }
 
-func writeHailstonesToFile(hailstones []*Hailstone, filename string) (string, error) {
+func writeXYHailstonesOctaveFile(hailstones []*Hailstone) (string, error) {
 	tmpl, err := template.New("hailstones").Parse(`
 lines = {
 {{- range .}}
-  struct('start', [{{.X}}, {{.Y}}, {{.Z}}], 'velocity', [{{.DX}}, {{.DY}}, {{.DZ}}]),
+  struct('start', [{{.X}}, {{.Y}}], 'velocity', [{{.DX}}, {{.DY}}]),
 {{- end}}
 };
 function intersecting_pairs = find_intersections(lines)
@@ -95,6 +94,8 @@ for k = 1:size(intersecting_pairs, 1)
     printf('(%d, %d) intersect at point: [%.2f, %.2f, %.2f]\n', ...
            i, j, intersection_point(1), intersection_point(2), intersection_point(3));
 end
+
+printf('Found %d intersections\n', size(intersecting_pairs, 1));
 `)
 	if err != nil {
 		return "", err
@@ -106,7 +107,7 @@ end
 		return "", err
 	}
 
-	tempFile, err := ioutil.TempFile("", "hailstones_*.txt")
+	tempFile, err := os.CreateTemp("/tmp", "hailstones_*.m")
 	if err != nil {
 		return "", err
 	}
@@ -157,11 +158,12 @@ func partOne(puzzleFile string) {
 		slog.Error("Error reading file", "error", err)
 	}
 
-	tempFile, err := writeHailstonesToFile(hs, puzzleFile)
+	tempFile, err := writeXYHailstonesOctaveFile(hs)
 	if err != nil {
 		slog.Error("Error writing to temp file", "error", err)
 		return
 	}
+	slog.Debug("Temp file", "file", tempFile)
 
 	output, err := exec.Command("octave", tempFile).Output()
 	if err != nil {
