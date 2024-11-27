@@ -32,82 +32,83 @@ z = 30t - 2 -> t = (z+2)/30
 */
 
 type Hailstone struct {
-	X, Y, Z    float64
-	DX, DY, DZ float64
+	X, Y, Z    int64
+	DX, DY, DZ int64
 }
 
 func (h *Hailstone) String() string {
-	return fmt.Sprintf("Hailstone{x=%f, y=%f, z=%f, dx=%f, dy=%f, dz=%f}", h.X, h.Y, h.Z, h.DX, h.DY, h.DZ)
+	return fmt.Sprintf("Hailstone{x=%d, y=%d, z=%d, dx=%d, dy=%d, dz=%d}", h.X, h.Y, h.Z, h.DX, h.DY, h.DZ)
 }
 
-func writeXYHailstonesOctaveFile(hailstones []*Hailstone) (string, error) {
+func writeXYHailstonesPythonFile(hailstones []*Hailstone, testAreaStart, testAreaEnd int) (string, error) {
 	tmpl, err := template.New("hailstones").Parse(`
-lines = {
-{{- range .}}
-  struct('start', [{{.X}}, {{.Y}}], 'velocity', [{{.DX}}, {{.DY}}]),
+from sympy import Point, Line
+
+lines = [
+{{- range .Hs}}
+  (Point({{.X}}, {{.Y}}), Point({{.X}} + ({{.DX}}), {{.Y}} + ({{.DY}}))),
 {{- end}}
-};
-function intersecting_pairs = find_intersections(lines)
-    n = length(lines);
-    
-    % Extract start points and velocities
-    starts = cell2mat(cellfun(@(x) x.start(:), lines, 'UniformOutput', false));
-    velocities = cell2mat(cellfun(@(x) x.velocity(:), lines, 'UniformOutput', false));
-    
-    % Create all possible pairs
-    [i, j] = meshgrid(1:n, 1:n);
-    pairs = [i(:), j(:)];
-    pairs = pairs(pairs(:,1) < pairs(:,2), :);
-    
-    % Set up the system of equations for all pairs at once
-    P1 = starts(:, pairs(:,1));
-    P2 = starts(:, pairs(:,2));
-    v1 = velocities(:, pairs(:,1));
-    v2 = velocities(:, pairs(:,2));
-    
-    % Solve the system for all pairs
-    A = cat(3, v1, -v2);
-    b = P2 - P1;
-    params = zeros(2, size(pairs, 1));
-    
-    for k = 1:size(pairs, 1)
-        params(:,k) = A(:,:,k) \ b(:,k);
-    end
-    
-    % Check for valid intersections
-    valid = all(isfinite(params), 1);
-    
-    % Return intersecting pairs and their parameters
-    intersecting_pairs = [pairs(valid,:), params(:,valid)'];
-end
+]
 
-% Assuming 'lines' is your array of line structures
-intersecting_pairs = find_intersections(lines);
+area_start = {{.TestAreaStart}}
+area_end = {{.TestAreaEnd}}
 
-% Display results
-for k = 1:size(intersecting_pairs, 1)
-    i = intersecting_pairs(k, 1);
-    j = intersecting_pairs(k, 2);
-    t = intersecting_pairs(k, 3);
-    s = intersecting_pairs(k, 4);
-    intersection_point = lines{i}.start + t * lines{i}.velocity;
-    printf('(%d, %d) intersect at point: [%.2f, %.2f, %.2f]\n', ...
-           i, j, intersection_point(1), intersection_point(2), intersection_point(3));
-end
+def is_future(p1, p2, intersection):
+	v = p2 - p1
+	if v.x > 0 and intersection.x < p1.x:
+		return False
+	if v.x < 0 and intersection.x > p1.x:
+		return False
+	if v.y > 0 and intersection.y < p1.y:
+		return False
+	if v.y < 0 and intersection.y > p1.y:
+		return False
+	return True
 
-printf('Found %d intersections\n', size(intersecting_pairs, 1));
+def is_between(p, start, end):
+	return p.x >= start and p.x <= end and p.y >= start and p.y <= end
+
+intersections = 0
+for i in range(len(lines)):
+	pi1, pi2 = lines[i]
+	line1 = Line(pi1, pi2)
+	for j in range(i+1, len(lines)):
+		pj1, pj2 = lines[j]
+		line2 = Line(pj1, pj2)
+
+		# Find the intersection
+		intersection = line1.intersection(line2)
+
+		if intersection and is_future(pi1, pi2, intersection[0]) and is_future(pj1, pj2, intersection[0]):
+			if is_between(intersection[0], area_start, area_end):
+				print(f"Lines ({pi1},{pj1}) intersect at: {intersection[0]}")
+				intersections += 1
+			else:
+				print(f"Lines ({pi1},{pj1}) intersect at: {intersection[0]} but outside area")
+		else:
+			print(f"Lines ({pi1}, {pj2}) do not intersect")
+	
+print(intersections)
 `)
 	if err != nil {
 		return "", err
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, hailstones)
+	err = tmpl.Execute(&buf, struct {
+		Hs            []*Hailstone
+		TestAreaStart int
+		TestAreaEnd   int
+	}{
+		Hs:            hailstones,
+		TestAreaStart: testAreaStart,
+		TestAreaEnd:   testAreaEnd,
+	})
 	if err != nil {
 		return "", err
 	}
 
-	tempFile, err := os.CreateTemp("/tmp", "hailstones_*.m")
+	tempFile, err := os.CreateTemp("/tmp", "hailstones_*.py")
 	if err != nil {
 		return "", err
 	}
@@ -121,7 +122,7 @@ printf('Found %d intersections\n', size(intersecting_pairs, 1));
 	return tempFile.Name(), nil
 }
 
-func partOne(puzzleFile string) {
+func partOne(puzzleFile string, testAreaStart, testAreaEnd int) {
 	slog.Info("Day TwentyFour part one", "puzzle file", puzzleFile)
 	file, err := os.Open(puzzleFile)
 	if err != nil {
@@ -138,18 +139,17 @@ func partOne(puzzleFile string) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Process the line here
-		slog.Info("Read line", "line", line)
 		parts := strings.Split(line, "@")
 		coords := strings.Split(parts[0], ",")
 		velocities := strings.Split(parts[1], ",")
 
-		x, _ := strconv.ParseFloat(strings.TrimSpace(coords[0]), 32)
-		y, _ := strconv.ParseFloat(strings.TrimSpace(coords[1]), 32)
-		z, _ := strconv.ParseFloat(strings.TrimSpace(coords[2]), 32)
+		x, _ := strconv.ParseInt(strings.TrimSpace(coords[0]), 10, 64)
+		y, _ := strconv.ParseInt(strings.TrimSpace(coords[1]), 10, 64)
+		z, _ := strconv.ParseInt(strings.TrimSpace(coords[2]), 10, 64)
 
-		dx, _ := strconv.ParseFloat(strings.TrimSpace(velocities[0]), 32)
-		dy, _ := strconv.ParseFloat(strings.TrimSpace(velocities[1]), 32)
-		dz, _ := strconv.ParseFloat(strings.TrimSpace(velocities[2]), 32)
+		dx, _ := strconv.ParseInt(strings.TrimSpace(velocities[0]), 10, 64)
+		dy, _ := strconv.ParseInt(strings.TrimSpace(velocities[1]), 10, 64)
+		dz, _ := strconv.ParseInt(strings.TrimSpace(velocities[2]), 10, 64)
 
 		hs = append(hs, &Hailstone{X: x, Y: y, Z: z, DX: dx, DY: dy, DZ: dz})
 	}
@@ -158,25 +158,28 @@ func partOne(puzzleFile string) {
 		slog.Error("Error reading file", "error", err)
 	}
 
-	tempFile, err := writeXYHailstonesOctaveFile(hs)
+	slog.Debug("hs", "hs", hs)
+
+	tempFile, err := writeXYHailstonesPythonFile(hs, testAreaStart, testAreaEnd)
 	if err != nil {
 		slog.Error("Error writing to temp file", "error", err)
 		return
 	}
-	slog.Debug("Temp file", "file", tempFile)
 
-	output, err := exec.Command("octave", tempFile).Output()
+	slog.Info("Processing with Python", "file", tempFile)
+	output, err := exec.Command("python", tempFile).Output()
 	if err != nil {
 		slog.Error("Error executing command", "error", err)
 		return
 	}
-	intersectionLines := strings.Split(string(output), "\n")
-	slog.Info("Octave output fetched", "intersections", len(intersectionLines))
-	for _, l := range intersectionLines {
-		slog.Info("Octave output", "line", l)
+	pout := strings.Split(string(output), "\n")
+	for _, l := range pout {
+		slog.Debug("pout", "line", l)
 	}
 
-	slog.Info("Finished Day TwentyFour part one", "expected", expected)
+	intersections, _ := strconv.ParseInt(pout[len(pout)-2], 10, 32)
+
+	slog.Info("Finished Day TwentyFour part one", "intersections", intersections, "expected", expected)
 }
 
 func partTwo(puzzleFile string) {
@@ -187,8 +190,10 @@ var Cmd = &cobra.Command{
 	Use: "dayTwentyFour",
 	Run: func(cmd *cobra.Command, args []string) {
 		puzzleInput, _ := cmd.Flags().GetString("puzzle-input")
+		testAreaStart, _ := cmd.Flags().GetInt("test-area-start")
+		testAreaEnd, _ := cmd.Flags().GetInt("test-area-end")
 		if !cmd.Flag("part-two").Changed {
-			partOne(puzzleInput)
+			partOne(puzzleInput, testAreaStart, testAreaEnd)
 		} else {
 			partTwo(puzzleInput)
 		}
@@ -197,4 +202,6 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.Flags().Bool("part-two", false, "Whether to run part two of the day's challenge")
+	Cmd.Flags().Int("test-area-start", 7, "")
+	Cmd.Flags().Int("test-area-end", 27, "")
 }
