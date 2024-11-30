@@ -14,23 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-/*
-It's a linear algebra problem! I'll want to
-- remove z
-- build the system of linear equations
-- construct an all pairs version of the matrices (probably a slick way to do this?)
-- inspect the intersection points for being between the desired x and y values
-
-19, 13, 30 @ -2,  1, -2
-x = 19t - 2 -> t = (x+2)/19
-y = 13t + 1 -> t = (y-1)/13
-z = 30t - 2 -> t = (z+2)/30
-3t = (x+2)/19 + (y-1)/13 + (z+2)/30
-
-18, 19, 22 @ -1, -1, -2
-3t = (x+1)/18 + (y+1)/19 + (z+2)/22
-*/
-
 type Hailstone struct {
 	X, Y, Z    int64
 	DX, DY, DZ int64
@@ -182,8 +165,151 @@ func partOne(puzzleFile string, testAreaStart, testAreaEnd int) {
 	slog.Info("Finished Day TwentyFour part one", "intersections", intersections, "expected", expected)
 }
 
+func writePartTwoHailstonesPythonFile(hailstones []*Hailstone) (string, error) {
+	tmpl, err := template.New("hailstones").Parse(`
+from z3 import *
+
+lines = [
+{{- range .Hs}}
+  ({{.X}}, {{.Y}}, {{.Z}}), ({{.X}} + ({{.DX}}), {{.Y}} + ({{.DY}}), {{.Z}} + ({{.DZ}})),
+{{- end}}
+]
+
+def solve_ray_intersection(lines):
+    solver = Solver()
+    
+    # Ray variables
+    x, y = Reals('x y')  # Starting point
+    vx, vy = Reals('vx vy')  # Velocity vector
+    
+    # Ensure non-zero velocity
+    solver.add(Or(vx != 0, vy != 0))
+    
+    for i, ((x1, y1), (x2, y2)) in enumerate(lines):
+        # Time variable for this line (integer)
+        t = Int(f't_{i}')
+        
+        # Ensure positive time
+        solver.add(t > 0)
+        
+        # Intersection point
+        ix = x + vx * t
+        iy = y + vy * t
+        
+        # Line equation: (y2-y1)*(x-x1) = (x2-x1)*(y-y1)
+        solver.add((y2-y1)*(ix-x1) == (x2-x1)*(iy-y1))
+        
+        # Ensure the intersection point is on the line segment
+        solver.add(And(
+            Min(x1, x2) <= ix, ix <= Max(x1, x2),
+            Min(y1, y2) <= iy, iy <= Max(y1, y2)
+        ))
+    
+    if solver.check() == sat:
+        model = solver.model()
+        ray_start = (model[x].as_decimal(3), model[y].as_decimal(3))
+        ray_velocity = (model[vx].as_decimal(3), model[vy].as_decimal(3))
+        return ray_start, ray_velocity
+    else:
+        return None
+
+result = solve_ray_intersection(lines)
+if result:
+    start, velocity = result
+    print(f"Ray start: {start}")
+    print(f"Ray velocity: {velocity}")
+else:
+    print("No solution found")
+
+`)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, struct {
+		Hs            []*Hailstone
+		TestAreaStart int
+		TestAreaEnd   int
+	}{
+		Hs: hailstones,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	tempFile, err := os.CreateTemp("/tmp", "hailstones_*.py")
+	if err != nil {
+		return "", err
+	}
+	defer tempFile.Close()
+
+	_, err = tempFile.Write(buf.Bytes())
+	if err != nil {
+		return "", err
+	}
+
+	return tempFile.Name(), nil
+}
+
 func partTwo(puzzleFile string) {
 	slog.Info("Day TwentyFour part two", "puzzle file", puzzleFile)
+	file, err := os.Open(puzzleFile)
+	if err != nil {
+		slog.Error("Error opening file", "error", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Scan()
+	expected := scanner.Text()
+
+	hs := []*Hailstone{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Process the line here
+		parts := strings.Split(line, "@")
+		coords := strings.Split(parts[0], ",")
+		velocities := strings.Split(parts[1], ",")
+
+		x, _ := strconv.ParseInt(strings.TrimSpace(coords[0]), 10, 64)
+		y, _ := strconv.ParseInt(strings.TrimSpace(coords[1]), 10, 64)
+		z, _ := strconv.ParseInt(strings.TrimSpace(coords[2]), 10, 64)
+
+		dx, _ := strconv.ParseInt(strings.TrimSpace(velocities[0]), 10, 64)
+		dy, _ := strconv.ParseInt(strings.TrimSpace(velocities[1]), 10, 64)
+		dz, _ := strconv.ParseInt(strings.TrimSpace(velocities[2]), 10, 64)
+
+		hs = append(hs, &Hailstone{X: x, Y: y, Z: z, DX: dx, DY: dy, DZ: dz})
+	}
+
+	if err := scanner.Err(); err != nil {
+		slog.Error("Error reading file", "error", err)
+	}
+
+	slog.Debug("hs", "hs", hs)
+
+	tempFile, err := writePartTwoHailstonesPythonFile(hs)
+	if err != nil {
+		slog.Error("Error writing to temp file", "error", err)
+		return
+	}
+
+	slog.Info("Processing with Python", "file", tempFile)
+	output, err := exec.Command("python", tempFile).Output()
+	if err != nil {
+		slog.Error("Error executing command", "error", err)
+		return
+	}
+	pout := strings.Split(string(output), "\n")
+	for _, l := range pout {
+		slog.Debug("pout", "line", l)
+	}
+
+	intersections, _ := strconv.ParseInt(pout[len(pout)-2], 10, 32)
+
+	slog.Info("Finished Day TwentyFour part one", "intersections", intersections, "expected", expected)
 }
 
 var Cmd = &cobra.Command{
