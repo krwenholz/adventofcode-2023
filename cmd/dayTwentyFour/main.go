@@ -152,7 +152,7 @@ func partOne(puzzleFile string, testAreaStart, testAreaEnd int) {
 	slog.Info("Processing with Python", "file", tempFile)
 	output, err := exec.Command("python", tempFile).Output()
 	if err != nil {
-		slog.Error("Error executing command", "error", err)
+		slog.Error("Error executing command", "error", err, "output", string(output))
 		return
 	}
 	pout := strings.Split(string(output), "\n")
@@ -167,60 +167,19 @@ func partOne(puzzleFile string, testAreaStart, testAreaEnd int) {
 
 func writePartTwoHailstonesPythonFile(hailstones []*Hailstone) (string, error) {
 	tmpl, err := template.New("hailstones").Parse(`
-from z3 import *
+import re
+from sympy import Eq, solve
+from sympy.abc import x, y, z, a, b, c, t, u, v
 
-lines = [
+hails = [
 {{- range .Hs}}
-  ({{.X}}, {{.Y}}, {{.Z}}), ({{.X}} + ({{.DX}}), {{.Y}} + ({{.DY}}), {{.Z}} + ({{.DZ}})),
+	[{{.X}}, {{.Y}}, {{.Z}}, {{.DX}}, {{.DY}}, {{.DZ}}],
 {{- end}}
 ]
-
-def solve_ray_intersection(lines):
-    solver = Solver()
-    
-    # Ray variables
-    x, y = Reals('x y')  # Starting point
-    vx, vy = Reals('vx vy')  # Velocity vector
-    
-    # Ensure non-zero velocity
-    solver.add(Or(vx != 0, vy != 0))
-    
-    for i, ((x1, y1), (x2, y2)) in enumerate(lines):
-        # Time variable for this line (integer)
-        t = Int(f't_{i}')
-        
-        # Ensure positive time
-        solver.add(t > 0)
-        
-        # Intersection point
-        ix = x + vx * t
-        iy = y + vy * t
-        
-        # Line equation: (y2-y1)*(x-x1) = (x2-x1)*(y-y1)
-        solver.add((y2-y1)*(ix-x1) == (x2-x1)*(iy-y1))
-        
-        # Ensure the intersection point is on the line segment
-        solver.add(And(
-            Min(x1, x2) <= ix, ix <= Max(x1, x2),
-            Min(y1, y2) <= iy, iy <= Max(y1, y2)
-        ))
-    
-    if solver.check() == sat:
-        model = solver.model()
-        ray_start = (model[x].as_decimal(3), model[y].as_decimal(3))
-        ray_velocity = (model[vx].as_decimal(3), model[vy].as_decimal(3))
-        return ray_start, ray_velocity
-    else:
-        return None
-
-result = solve_ray_intersection(lines)
-if result:
-    start, velocity = result
-    print(f"Ray start: {start}")
-    print(f"Ray velocity: {velocity}")
-else:
-    print("No solution found")
-
+solution = solve([Eq(hails[0][0] + t * hails[0][3], x + t * a), Eq(hails[0][1] + t * hails[0][4], y + t * b), Eq(hails[0][2] + t * hails[0][5], z + t * c),
+                  Eq(hails[1][0] + u * hails[1][3], x + u * a), Eq(hails[1][1] + u * hails[1][4], y + u * b), Eq(hails[1][2] + u * hails[1][5], z + u * c),
+                  Eq(hails[2][0] + v * hails[2][3], x + v * a), Eq(hails[2][1] + v * hails[2][4], y + v * b), Eq(hails[2][2] + v * hails[2][5], z + v * c)])
+print(solution[0][x] + solution[0][y] + solution[0][z])
 `)
 	if err != nil {
 		return "", err
@@ -263,7 +222,6 @@ func partTwo(puzzleFile string) {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Scan()
-	expected := scanner.Text()
 
 	hs := []*Hailstone{}
 	for scanner.Scan() {
@@ -299,17 +257,13 @@ func partTwo(puzzleFile string) {
 	slog.Info("Processing with Python", "file", tempFile)
 	output, err := exec.Command("python", tempFile).Output()
 	if err != nil {
-		slog.Error("Error executing command", "error", err)
+		slog.Error("Error executing command", "error", err, "output", string(output))
 		return
 	}
 	pout := strings.Split(string(output), "\n")
-	for _, l := range pout {
-		slog.Debug("pout", "line", l)
-	}
+	theLine := pout[len(pout)-2]
 
-	intersections, _ := strconv.ParseInt(pout[len(pout)-2], 10, 32)
-
-	slog.Info("Finished Day TwentyFour part one", "intersections", intersections, "expected", expected)
+	slog.Info("Finished Day TwentyFour part two", "the line", theLine)
 }
 
 var Cmd = &cobra.Command{
