@@ -165,6 +165,10 @@ func partOne(puzzleFile string, testAreaStart, testAreaEnd int) {
 	slog.Info("Finished Day TwentyFour part one", "intersections", intersections, "expected", expected)
 }
 
+/*
+* Got _very_ stuck on part two, so I went to Reddit for help and found a mostly understandable SymPy solution.
+https://www.reddit.com/r/adventofcode/comments/1gq4a08/2023_day_24_part_2_python_algorithm_in_a_single/
+*/
 func writePartTwoHailstonesPythonFile(hailstones []*Hailstone) (string, error) {
 	tmpl, err := template.New("hailstones").Parse(`
 import re
