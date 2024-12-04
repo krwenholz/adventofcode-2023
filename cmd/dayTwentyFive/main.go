@@ -14,31 +14,55 @@ type Component struct {
 	Connections []string
 }
 
-func findBridges(cs map[string]*Component, current string, visited map[string]bool, depth int) {
-	disc := make([]int, len(cs))
-	low := make([]int, len(cs))
+func findBridges(cs map[string]*Component) [][]string {
+	visited := map[string]bool{}
+	disc := map[string]int{}
+	low := map[string]int{}
 	parent := map[string]string{}
-	bridges := []string{}
+	bridges := [][]string{}
 	time := 0
 
-	func dfs func(u int) {
+	var dfs func(u string)
+	dfs = func(u string) {
+		visited[u] = true
+
 		disc[u] = time
 		low[u] = time
 		time++
 
+		// Recurse for all adjacent vertices
 		for _, v := range cs[u].Connections {
-			if disc[v] == 0 {
-				parent[v] = cs[u].Label
-				dfs(v)
-				low[u] = min(low[u], low[v])
-				if low[v] > disc[u] {
-					bridges = append(bridges, u)
+			// If v is not visited yet, we make it a child of u in DFS tree
+			// and then recurse for it
+			if !visited[v] {
+				if disc[v] == 0 {
+					parent[v] = u
+					dfs(v)
+
+					// Check if the subtree rooted with v has a connection to one of the ancestors of u
+					low[u] = min(low[u], low[v])
+
+					// If the lowest vertex reachable from subtree under v is below u in DFS tree, then u-v is a bridge
+					if low[v] > disc[u] {
+						bridges = append(bridges, []string{u, v})
+					}
+				} else if v != parent[u] {
+					low[u] = min(low[u], disc[v])
 				}
-			} else if v != parent[u] {
+			} else if p, ok := parent[u]; ok && p != v {
+				// Update low value of u for parent function calls.
 				low[u] = min(low[u], disc[v])
 			}
 		}
 	}
+
+	for u := range cs {
+		if !visited[u] {
+			dfs(u)
+		}
+	}
+
+	return bridges
 }
 
 func partOne(puzzleFile string) {
@@ -87,7 +111,9 @@ func partOne(puzzleFile string) {
 		slog.Error("Error reading file", "error", err)
 	}
 
-	slog.Info("Finished Day TwentyFive part one", "expected", expected)
+	bridges := findBridges(cs)
+
+	slog.Info("Finished Day TwentyFive part one", "expected", expected, "bridges", bridges)
 }
 
 func partTwo(puzzleFile string) {
