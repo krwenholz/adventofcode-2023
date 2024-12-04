@@ -67,64 +67,47 @@ func findBridges(cs map[string]*Component) [][]string {
 	return bridges
 }
 
-func partOne(puzzleFile string) {
-	slog.Info("Day TwentyFive part one", "puzzle file", puzzleFile)
-	file, err := os.Open(puzzleFile)
-	if err != nil {
-		slog.Error("Error opening file", "error", err)
-		return
+func twoComponentsAdj(cs map[string][]string) (bool, int) {
+	visited := map[string]bool{}
+
+	var dfs func(u string)
+	dfs = func(u string) {
+		visited[u] = true
+		for _, v := range cs[u] {
+			if !visited[v] {
+				dfs(v)
+			}
+		}
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	scanner.Scan()
-	expected := scanner.Text()
-
-	cs := map[string]*Component{}
-	for scanner.Scan() {
-		line := scanner.Text()
-		splits := strings.Split(line, ":")
-		label := splits[0]
-		if label == "" {
-			slog.Error("Invalid line", "line", line)
-			continue
-		}
-
-		if _, ok := cs[label]; !ok {
-			c := &Component{
-				Label: label,
-			}
-			cs[label] = c
-		}
-		c := cs[label]
-
-		connections := strings.Split(splits[1], " ")
-		for _, newConLabel := range connections {
-			if newConLabel == "" {
-				continue
-			}
-			c.Connections = append(c.Connections, newConLabel)
-
-			if conComponent, ok := cs[newConLabel]; ok {
-				conComponent.Connections = append(conComponent.Connections, label)
+	components := []int{}
+	for u := range cs {
+		if !visited[u] {
+			dfs(u)
+			if len(components) > 0 {
+				components = append(components, len(visited)-components[0])
 			} else {
-				cs[newConLabel] = &Component{
-					Label:       newConLabel,
-					Connections: []string{label},
-				}
+				components = append(components, len(visited))
+			}
+			if len(components) > 2 {
+				return false, 0
 			}
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		slog.Error("Error reading file", "error", err)
+	if len(components) < 2 {
+		return false, 0
 	}
 
-	slog.Debug("Components", "cs", cs)
+	val := 1
+	for _, c := range components {
+		val *= c
+	}
+	slog.Debug("Components", "components", components, "val", val)
+	return true, val
+}
 
-	var bridges [][]string
-	//bridges = findBridges(cs)
-
+func generateMermaidDiagram(edges [][]string) {
 	mermaidFile, err := os.Create("/tmp/mermaid_diagram.mmd")
 	if err != nil {
 		slog.Error("Error creating mermaid file", "error", err)
@@ -139,26 +122,160 @@ func partOne(puzzleFile string) {
 		return
 	}
 
-	for _, component := range cs {
-		for _, connection := range component.Connections {
-			_, err = mermaidFile.WriteString(fmt.Sprintf(
-				"%s --> %s\n",
-				component.Label, connection))
-			if err != nil {
-				slog.Error("Error writing to mermaid file", "error", err)
-				return
+	for _, e := range edges {
+		_, err = mermaidFile.WriteString(
+			fmt.Sprintf(
+				"%s <--> %s\n",
+				e[0],
+				e[1],
+			))
+		if err != nil {
+			slog.Error("Error writing to mermaid file", "error", err)
+			return
+		}
+	}
+	if os.Getenv("LOG_LEVEL") == "debug" || os.Getenv("LOG_LEVEL") == "DEBUG" {
+		cmd := exec.Command("mmdc", "-i", "/tmp/mermaid_diagram.mmd", "-o", "/tmp/mermaid_diagram.png")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			slog.Error("Error running mmdc command", "error", err, "output", string(output))
+			return
+		}
+		slog.Info("Mermaid diagram generated", "output", string(output), "location", "/tmp/mermaid_diagram.png")
+	}
+}
+
+func removeEdge(u0, u1 string, cs map[string][]string) {
+	cons := []string{}
+	for _, v := range cs[u0] {
+		if v == u1 {
+			continue
+		}
+		cons = append(cons, v)
+	}
+	cs[u0] = cons
+
+	cons = []string{}
+	for _, v := range cs[u1] {
+		if v == u0 {
+			continue
+		}
+		cons = append(cons, v)
+	}
+	cs[u1] = cons
+}
+
+func findComponentizingBridgesAdj(cs map[string][]string) ([][]string, int) {
+	edges := [][]string{}
+	slog.Debug("Components", "len(cs)", len(cs))
+
+	for u0, cons := range cs {
+		for _, u1 := range cons {
+			if u0 > u1 {
+				// Avoid duplicates
+				continue
+			}
+			edges = append(edges, []string{u0, u1})
+		}
+	}
+	generateMermaidDiagram(edges)
+	slog.Debug("Edges", "len(edges)", len(edges))
+
+	for i := range edges {
+		e0 := edges[i]
+
+		for j := i + 1; j < len(edges); j++ {
+			e1 := edges[j]
+
+			for k := j + 1; k < len(edges); k++ {
+				e2 := edges[k]
+
+				// Remove edges and check if we have two components
+				tmpGraph := map[string][]string{}
+				for u := range cs {
+					tmpGraph[u] = cs[u]
+				}
+				removeEdge(e0[0], e0[1], tmpGraph)
+				removeEdge(e1[0], e1[1], tmpGraph)
+				removeEdge(e2[0], e2[1], tmpGraph)
+
+				done, val := twoComponentsAdj(tmpGraph)
+				if done {
+					return [][]string{e0, e1, e2}, val
+				}
+			}
+
+			slog.Info("Progress", "i", i, "j", j, "len(edges)", len(edges))
+		}
+	}
+	return [][]string{}, 0
+}
+
+func partOne(puzzleFile string) {
+	slog.Info("Day TwentyFive part one", "puzzle file", puzzleFile)
+	file, err := os.Open(puzzleFile)
+	if err != nil {
+		slog.Error("Error opening file", "error", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Scan()
+	expected := scanner.Text()
+
+	cs := map[string]*Component{}
+	csAdj := map[string][]string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		splits := strings.Split(line, ":")
+		label := splits[0]
+		if label == "" {
+			slog.Error("Invalid line", "line", line)
+			continue
+		}
+
+		if _, ok := cs[label]; !ok {
+			c := &Component{
+				Label: label,
+			}
+			cs[label] = c
+			csAdj[label] = []string{}
+		}
+		c := cs[label]
+
+		connections := strings.Split(splits[1], " ")
+		for _, newConLabel := range connections {
+			if newConLabel == "" {
+				continue
+			}
+			c.Connections = append(c.Connections, newConLabel)
+			csAdj[label] = append(csAdj[label], newConLabel)
+
+			if conComponent, ok := cs[newConLabel]; ok {
+				conComponent.Connections = append(conComponent.Connections, label)
+				csAdj[newConLabel] = append(csAdj[newConLabel], label)
+			} else {
+				cs[newConLabel] = &Component{
+					Label:       newConLabel,
+					Connections: []string{label},
+				}
+				csAdj[newConLabel] = []string{label}
 			}
 		}
 	}
-	cmd := exec.Command("mmdc", "-i", "/tmp/mermaid_diagram.mmd", "-o", "/tmp/mermaid_diagram.png")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		slog.Error("Error running mmdc command", "error", err, "output", string(output))
-		return
-	}
-	slog.Info("Mermaid diagram generated", "output", string(output), "location", "/tmp/mermaid_diagram.png")
 
-	slog.Info("Finished Day TwentyFive part one", "expected", expected, "bridges", bridges)
+	if err := scanner.Err(); err != nil {
+		slog.Error("Error reading file", "error", err)
+	}
+
+	//var bridges [][]string
+	//bridges = findBridges(cs)
+
+	//bridges, val := findComponentizingBridges(cs)
+	bridges, val := findComponentizingBridgesAdj(csAdj)
+
+	slog.Info("Finished Day TwentyFive part one", "expected", expected, "bridges", bridges, "val", val)
 }
 
 func partTwo(puzzleFile string) {
