@@ -2,8 +2,10 @@ package dayTwentyFive
 
 import (
 	"bufio"
+	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -83,6 +85,10 @@ func partOne(puzzleFile string) {
 		line := scanner.Text()
 		splits := strings.Split(line, ":")
 		label := splits[0]
+		if label == "" {
+			slog.Error("Invalid line", "line", line)
+			continue
+		}
 
 		if _, ok := cs[label]; !ok {
 			c := &Component{
@@ -94,6 +100,9 @@ func partOne(puzzleFile string) {
 
 		connections := strings.Split(splits[1], " ")
 		for _, newConLabel := range connections {
+			if newConLabel == "" {
+				continue
+			}
 			c.Connections = append(c.Connections, newConLabel)
 
 			if conComponent, ok := cs[newConLabel]; ok {
@@ -111,7 +120,43 @@ func partOne(puzzleFile string) {
 		slog.Error("Error reading file", "error", err)
 	}
 
-	bridges := findBridges(cs)
+	slog.Debug("Components", "cs", cs)
+
+	var bridges [][]string
+	//bridges = findBridges(cs)
+
+	mermaidFile, err := os.Create("/tmp/mermaid_diagram.mmd")
+	if err != nil {
+		slog.Error("Error creating mermaid file", "error", err)
+		return
+	}
+	defer mermaidFile.Close()
+
+	_, _ = mermaidFile.WriteString("%%{init: {\"flowchart\": {\"defaultRenderer\": \"elk\"}} }%%\n")
+	_, err = mermaidFile.WriteString("flowchart LR;\n")
+	if err != nil {
+		slog.Error("Error writing to mermaid file", "error", err)
+		return
+	}
+
+	for _, component := range cs {
+		for _, connection := range component.Connections {
+			_, err = mermaidFile.WriteString(fmt.Sprintf(
+				"%s --> %s\n",
+				component.Label, connection))
+			if err != nil {
+				slog.Error("Error writing to mermaid file", "error", err)
+				return
+			}
+		}
+	}
+	cmd := exec.Command("mmdc", "-i", "/tmp/mermaid_diagram.mmd", "-o", "/tmp/mermaid_diagram.png")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Error("Error running mmdc command", "error", err, "output", string(output))
+		return
+	}
+	slog.Info("Mermaid diagram generated", "output", string(output), "location", "/tmp/mermaid_diagram.png")
 
 	slog.Info("Finished Day TwentyFive part one", "expected", expected, "bridges", bridges)
 }

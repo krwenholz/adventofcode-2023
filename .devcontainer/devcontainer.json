@@ -35,7 +35,8 @@
         "vscodevim.vim",
         "esbenp.prettier-vscode",
         "golang.go",
-        "mkhl.direnv"
+        "mkhl.direnv",
+        "bierner.markdown-mermaid"
       ]
     }
   },
