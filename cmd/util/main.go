@@ -1,5 +1,10 @@
 package util
 
+import (
+	"os"
+	"strings"
+)
+
 func Min(a, b int) int {
 	if a < b {
 		return a
@@ -26,4 +31,9 @@ func Abs(a int) int {
 		return -a
 	}
 	return a
+}
+
+func InDebugMode() bool {
+	level := strings.ToLower(os.Getenv("LOG_LEVEL"))
+	return level == "debug"
 }

@@ -1,6 +1,7 @@
 package dayTwentyFive
 
 import (
+	"adventofcode/cmd/util"
 	"bufio"
 	"fmt"
 	"log/slog"
@@ -16,24 +17,28 @@ type Component struct {
 	Connections []string
 }
 
-func findBridges(cs map[string]*Component) [][]string {
+func findBridges(cs map[string][]string) [][]string {
 	visited := map[string]bool{}
 	disc := map[string]int{}
 	low := map[string]int{}
 	parent := map[string]string{}
+	for u := range cs {
+		visited[u] = false
+		disc[u] = 0
+		low[u] = 0
+		parent[u] = ""
+	}
 	bridges := [][]string{}
 	time := 0
 
 	var dfs func(u string)
 	dfs = func(u string) {
-		visited[u] = true
-
 		disc[u] = time
 		low[u] = time
 		time++
 
 		// Recurse for all adjacent vertices
-		for _, v := range cs[u].Connections {
+		for _, v := range cs[u] {
 			// If v is not visited yet, we make it a child of u in DFS tree
 			// and then recurse for it
 			if !visited[v] {
@@ -51,7 +56,7 @@ func findBridges(cs map[string]*Component) [][]string {
 				} else if v != parent[u] {
 					low[u] = min(low[u], disc[v])
 				}
-			} else if p, ok := parent[u]; ok && p != v {
+			} else if v != parent[u] {
 				// Update low value of u for parent function calls.
 				low[u] = min(low[u], disc[v])
 			}
@@ -67,7 +72,7 @@ func findBridges(cs map[string]*Component) [][]string {
 	return bridges
 }
 
-func twoComponentsAdj(cs map[string][]string) (bool, int) {
+func productOfTwoComponents(cs map[string][]string) int {
 	visited := map[string]bool{}
 
 	var dfs func(u string)
@@ -90,13 +95,13 @@ func twoComponentsAdj(cs map[string][]string) (bool, int) {
 				components = append(components, len(visited))
 			}
 			if len(components) > 2 {
-				return false, 0
+				panic("More than two components")
 			}
 		}
 	}
 
 	if len(components) < 2 {
-		return false, 0
+		panic("Less than two components")
 	}
 
 	val := 1
@@ -104,10 +109,14 @@ func twoComponentsAdj(cs map[string][]string) (bool, int) {
 		val *= c
 	}
 	slog.Debug("Components", "components", components, "val", val)
-	return true, val
+	return val
 }
 
 func generateMermaidDiagram(edges [][]string) {
+	if !util.InDebugMode() {
+		return
+	}
+
 	mermaidFile, err := os.Create("/tmp/mermaid_diagram.mmd")
 	if err != nil {
 		slog.Error("Error creating mermaid file", "error", err)
@@ -134,15 +143,13 @@ func generateMermaidDiagram(edges [][]string) {
 			return
 		}
 	}
-	if os.Getenv("LOG_LEVEL") == "debug" || os.Getenv("LOG_LEVEL") == "DEBUG" {
-		cmd := exec.Command("mmdc", "-i", "/tmp/mermaid_diagram.mmd", "-o", "/tmp/mermaid_diagram.png")
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			slog.Error("Error running mmdc command", "error", err, "output", string(output))
-			return
-		}
-		slog.Info("Mermaid diagram generated", "output", string(output), "location", "/tmp/mermaid_diagram.png")
+	cmd := exec.Command("mmdc", "-i", "/tmp/mermaid_diagram.mmd", "-o", "/tmp/mermaid_diagram.png")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Error("Error running mmdc command", "error", err, "output", string(output))
+		return
 	}
+	slog.Info("Mermaid diagram generated", "output", string(output), "location", "/tmp/mermaid_diagram.png")
 }
 
 func removeEdge(u0, u1 string, cs map[string][]string) {
@@ -186,26 +193,34 @@ func findComponentizingBridgesAdj(cs map[string][]string) ([][]string, int) {
 
 		for j := i + 1; j < len(edges); j++ {
 			e1 := edges[j]
+			// TODO(kyle-2024-12-04): Actually, if we're on the correct set of edge removals,
+			// only one edge still exists such that it is a bridge, meaning it only has one connection
+			// I might need to count connections for all edges to see if this is true
+			// there may also be a property of the connection counts in this graph that more quickly
+			// identifies the correct set of edges to remove
+			// 13-20 timing on the nested loop dfs approach
+			// ~5ms with the missing edge approach
+			// Remove edges and check if we have two components
+			tmpGraph := map[string][]string{}
+			for u := range cs {
+				tmpGraph[u] = cs[u]
+			}
+			removeEdge(e0[0], e0[1], tmpGraph)
+			removeEdge(e1[0], e1[1], tmpGraph)
 
-			for k := j + 1; k < len(edges); k++ {
-				e2 := edges[k]
-
-				// Remove edges and check if we have two components
-				tmpGraph := map[string][]string{}
-				for u := range cs {
-					tmpGraph[u] = cs[u]
-				}
-				removeEdge(e0[0], e0[1], tmpGraph)
-				removeEdge(e1[0], e1[1], tmpGraph)
-				removeEdge(e2[0], e2[1], tmpGraph)
-
-				done, val := twoComponentsAdj(tmpGraph)
-				if done {
-					return [][]string{e0, e1, e2}, val
-				}
+			bridges := findBridges(tmpGraph)
+			if len(bridges) != 1 {
+				continue
 			}
 
-			slog.Info("Progress", "i", i, "j", j, "len(edges)", len(edges))
+			e2 := bridges[0]
+			slog.Debug("Bridges", "e0", e0, "e1", e1, "e2", e2)
+			removeEdge(e2[0], e2[1], tmpGraph)
+			return [][]string{e0, e1, e2}, productOfTwoComponents(tmpGraph)
+		}
+
+		if i%100 == 0 {
+			slog.Info("Progress", "i", i, "len(edges)", len(edges))
 		}
 	}
 	return [][]string{}, 0
