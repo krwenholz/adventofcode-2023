@@ -30,7 +30,7 @@
 
             # ... which makes available the following dependencies, 
             # all sourced from the `pkgs` package set:
-            packages = with pkgs; [ nix git go cobra-cli python312 python312Packages.sympy mermaid-cli ];
+            packages = with pkgs; [ nix git go cobra-cli python312 python312Packages.sympy mermaid-cli graphviz ];
           };
       });
 }

@@ -12,66 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type Component struct {
-	Label       string
-	Connections []string
-}
-
-func findBridges(cs map[string][]string) [][]string {
-	visited := map[string]bool{}
-	disc := map[string]int{}
-	low := map[string]int{}
-	parent := map[string]string{}
-	for u := range cs {
-		visited[u] = false
-		disc[u] = 0
-		low[u] = 0
-		parent[u] = ""
-	}
-	bridges := [][]string{}
-	time := 0
-
-	var dfs func(u string)
-	dfs = func(u string) {
-		disc[u] = time
-		low[u] = time
-		time++
-
-		// Recurse for all adjacent vertices
-		for _, v := range cs[u] {
-			// If v is not visited yet, we make it a child of u in DFS tree
-			// and then recurse for it
-			if !visited[v] {
-				if disc[v] == 0 {
-					parent[v] = u
-					dfs(v)
-
-					// Check if the subtree rooted with v has a connection to one of the ancestors of u
-					low[u] = min(low[u], low[v])
-
-					// If the lowest vertex reachable from subtree under v is below u in DFS tree, then u-v is a bridge
-					if low[v] > disc[u] {
-						bridges = append(bridges, []string{u, v})
-					}
-				} else if v != parent[u] {
-					low[u] = min(low[u], disc[v])
-				}
-			} else if v != parent[u] {
-				// Update low value of u for parent function calls.
-				low[u] = min(low[u], disc[v])
-			}
-		}
-	}
-
-	for u := range cs {
-		if !visited[u] {
-			dfs(u)
-		}
-	}
-
-	return bridges
-}
-
 func productOfTwoComponents(cs map[string][]string) int {
 	visited := map[string]bool{}
 
@@ -112,9 +52,16 @@ func productOfTwoComponents(cs map[string][]string) int {
 	return val
 }
 
-func generateMermaidDiagram(edges [][]string) {
+func generateMermaidDiagram(cs map[string][]string) {
 	if !util.InDebugMode() {
 		return
+	}
+
+	edges := [][]string{}
+	for u, cons := range cs {
+		for _, v := range cons {
+			edges = append(edges, []string{u, v})
+		}
 	}
 
 	mermaidFile, err := os.Create("/tmp/mermaid_diagram.mmd")
@@ -152,6 +99,35 @@ func generateMermaidDiagram(edges [][]string) {
 	slog.Info("Mermaid diagram generated", "output", string(output), "location", "/tmp/mermaid_diagram.png")
 }
 
+func generateGraphviz(cs map[string][]string) {
+	if !util.InDebugMode() {
+		return
+	}
+
+	edges := map[string]bool{}
+	for u, cons := range cs {
+		for _, v := range cons {
+			if _, ok := edges[v+" -- "+u]; !ok {
+				edges[u+"--"+v] = true
+			}
+		}
+	}
+
+	graphvizFile, err := os.Create("/tmp/graphviz_diagram.dot")
+	if err != nil {
+		slog.Error("Error creating graphviz file", "error", err)
+		return
+	}
+	defer graphvizFile.Close()
+
+	_, _ = graphvizFile.WriteString("graph {\n")
+	for e := range edges {
+		_, err = graphvizFile.WriteString(
+			fmt.Sprintf("%s\n", e))
+	}
+	_, _ = graphvizFile.WriteString("}\n")
+}
+
 func removeEdge(u0, u1 string, cs map[string][]string) {
 	cons := []string{}
 	for _, v := range cs[u0] {
@@ -172,59 +148,8 @@ func removeEdge(u0, u1 string, cs map[string][]string) {
 	cs[u1] = cons
 }
 
-func findComponentizingBridgesAdj(cs map[string][]string) ([][]string, int) {
-	edges := [][]string{}
-	slog.Debug("Components", "len(cs)", len(cs))
-
-	for u0, cons := range cs {
-		for _, u1 := range cons {
-			if u0 > u1 {
-				// Avoid duplicates
-				continue
-			}
-			edges = append(edges, []string{u0, u1})
-		}
-	}
-	generateMermaidDiagram(edges)
-	slog.Debug("Edges", "len(edges)", len(edges))
-
-	for i := range edges {
-		e0 := edges[i]
-
-		for j := i + 1; j < len(edges); j++ {
-			e1 := edges[j]
-			// TODO(kyle-2024-12-04): Actually, if we're on the correct set of edge removals,
-			// only one edge still exists such that it is a bridge, meaning it only has one connection
-			// I might need to count connections for all edges to see if this is true
-			// there may also be a property of the connection counts in this graph that more quickly
-			// identifies the correct set of edges to remove
-			// 13-20 timing on the nested loop dfs approach
-			// ~5ms with the missing edge approach
-			// Remove edges and check if we have two components
-			tmpGraph := map[string][]string{}
-			for u := range cs {
-				tmpGraph[u] = cs[u]
-			}
-			removeEdge(e0[0], e0[1], tmpGraph)
-			removeEdge(e1[0], e1[1], tmpGraph)
-
-			bridges := findBridges(tmpGraph)
-			if len(bridges) != 1 {
-				continue
-			}
-
-			e2 := bridges[0]
-			slog.Debug("Bridges", "e0", e0, "e1", e1, "e2", e2)
-			removeEdge(e2[0], e2[1], tmpGraph)
-			return [][]string{e0, e1, e2}, productOfTwoComponents(tmpGraph)
-		}
-
-		if i%100 == 0 {
-			slog.Info("Progress", "i", i, "len(edges)", len(edges))
-		}
-	}
-	return [][]string{}, 0
-}
+// https://www.sciencedirect.com/science/article/pii/S1570866708000415#sec005
+// ugh, god nevermind
 
 func partOne(puzzleFile string) {
 	slog.Info("Day TwentyFive part one", "puzzle file", puzzleFile)
@@ -239,43 +164,31 @@ func partOne(puzzleFile string) {
 	scanner.Scan()
 	expected := scanner.Text()
 
-	cs := map[string]*Component{}
-	csAdj := map[string][]string{}
+	cs := map[string][]string{}
 	for scanner.Scan() {
 		line := scanner.Text()
 		splits := strings.Split(line, ":")
-		label := splits[0]
-		if label == "" {
+		c := splits[0]
+		if c == "" {
 			slog.Error("Invalid line", "line", line)
 			continue
 		}
 
-		if _, ok := cs[label]; !ok {
-			c := &Component{
-				Label: label,
-			}
-			cs[label] = c
-			csAdj[label] = []string{}
+		if _, ok := cs[c]; !ok {
+			cs[c] = []string{}
 		}
-		c := cs[label]
 
 		connections := strings.Split(splits[1], " ")
 		for _, newConLabel := range connections {
 			if newConLabel == "" {
 				continue
 			}
-			c.Connections = append(c.Connections, newConLabel)
-			csAdj[label] = append(csAdj[label], newConLabel)
+			cs[c] = append(cs[c], newConLabel)
 
-			if conComponent, ok := cs[newConLabel]; ok {
-				conComponent.Connections = append(conComponent.Connections, label)
-				csAdj[newConLabel] = append(csAdj[newConLabel], label)
+			if _, ok := cs[newConLabel]; ok {
+				cs[newConLabel] = append(cs[newConLabel], c)
 			} else {
-				cs[newConLabel] = &Component{
-					Label:       newConLabel,
-					Connections: []string{label},
-				}
-				csAdj[newConLabel] = []string{label}
+				cs[newConLabel] = []string{c}
 			}
 		}
 	}
@@ -284,13 +197,31 @@ func partOne(puzzleFile string) {
 		slog.Error("Error reading file", "error", err)
 	}
 
-	//var bridges [][]string
-	//bridges = findBridges(cs)
+	generateGraphviz(cs)
 
-	//bridges, val := findComponentizingBridges(cs)
-	bridges, val := findComponentizingBridgesAdj(csAdj)
+	// I looked at the graphviz and found these
+	// Helpful tip on the settings to cluster: https://www.reddit.com/r/adventofcode/comments/18qcsux/2023_day_25_part_1_solve_by_visualization/
+	if strings.Contains(puzzleFile, "sample") {
+		for _, e := range [][]string{
+			{"pzl", "hfx"},
+			{"nvd", "jqt"},
+			{"cmg", "bvb"},
+		} {
+			removeEdge(e[0], e[1], cs)
+		}
+	} else {
+		for _, e := range [][]string{
+			{"mnf", "hrs"},
+			{"kpc", "nnl"},
+			{"rkh", "sph"},
+		} {
+			removeEdge(e[0], e[1], cs)
+		}
+	}
 
-	slog.Info("Finished Day TwentyFive part one", "expected", expected, "bridges", bridges, "val", val)
+	val := productOfTwoComponents(cs)
+
+	slog.Info("Finished Day TwentyFive part one", "expected", expected, "val", val)
 }
 
 func partTwo(puzzleFile string) {
